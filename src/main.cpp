@@ -6,6 +6,7 @@
 #include <SDL2/SDL_opengl.h>
 
 #include "camera.hpp"
+#include "control.hpp"
 #include "render.hpp"
 #include "scene.hpp"
 #include "state.hpp"
@@ -66,14 +67,19 @@ int main(int argc, char **argv) {
     auto render = Render();
     auto aspectRatio = g_ScreenWidth / static_cast<float>(g_ScreenHeight);
 
+    g_Control = std::shared_ptr<Control>(new Control());
     g_MainCamera = std::shared_ptr<Camera>(new Camera(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f)));
 
     render.LoadScene(Scene(g_ResourcePath / std::filesystem::path(filename)));
 
-    auto event = SDL_Event {};
+    auto events = std::vector<SDL_Event>();
     auto quit = false;
 
     while (!quit) {
+        events.clear();
+
+        auto event = SDL_Event {};
+        
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 quit = true;
@@ -82,8 +88,14 @@ int main(int argc, char **argv) {
                     quit = true;
                 }
             }
+
+            events.push_back(event);
         }
-        
+
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+
+        g_Control->Update(events);
+
         render.Update();
 
         SDL_GL_SwapWindow(window);

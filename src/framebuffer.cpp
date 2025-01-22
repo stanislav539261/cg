@@ -37,11 +37,11 @@ void Framebuffer::Bind() {
 void Framebuffer::ClearColor(GLuint layer, GLfloat r, GLfloat b, GLfloat g, GLfloat a) {
     auto values = { r, g, b, a };
 
-    glClearNamedFramebufferfv(0, GL_COLOR, 0, values.begin());
+    glClearNamedFramebufferfv(m_Handle, GL_COLOR, layer, values.begin());
 }
 
 void Framebuffer::ClearDepth(GLuint layer, GLfloat d) {
-    glClearNamedFramebufferfv(m_Handle, GL_DEPTH, 0, &d);
+    glClearNamedFramebufferfv(m_Handle, GL_DEPTH, layer, &d);
 }
 
 void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<Texture2D> &texture) {

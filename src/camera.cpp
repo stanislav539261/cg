@@ -53,6 +53,14 @@ glm::mat4 Camera::Projection(bool reversedZ) {
     );
 }
 
+void Camera::Translate(const glm::vec3 &direction) {
+    auto forward = Forward();
+    auto speed = 1000.f * g_DeltaTime;
+
+    m_Position += speed * forward * direction.z;
+    m_Position += speed * glm::normalize(glm::cross(forward, m_Up)) * direction.x;
+}
+
 glm::mat4 Camera::View() {
     auto forward = Forward();
 

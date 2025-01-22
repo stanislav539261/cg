@@ -12,6 +12,7 @@ public:
 
     glm::vec3   Forward();
     glm::mat4   Projection(bool);
+    void        Translate(const glm::vec3 &);
     glm::mat4   View();
 
     float       m_AspectRatio;

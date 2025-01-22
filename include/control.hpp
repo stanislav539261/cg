@@ -1,4 +1,5 @@
 #include <memory>
+#include <set>
 #include <vector>
 
 #include <SDL2/SDL_events.h>
@@ -9,6 +10,8 @@ public:
     ~Control();
 
     void                        Update(const std::vector<SDL_Event> &);
+
+    std::set<unsigned int>      m_KeysPressed;
 };
 
 extern std::shared_ptr<Control> g_Control; 

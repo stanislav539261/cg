@@ -72,10 +72,15 @@ int main(int argc, char **argv) {
 
     render.LoadScene(Scene(g_ResourcePath / std::filesystem::path(filename)));
 
+    auto clock = std::chrono::system_clock::now();
     auto events = std::vector<SDL_Event>();
     auto quit = false;
 
     while (!quit) {
+        g_PreviousTime = g_CurrentTime;
+        g_CurrentTime = static_cast<std::chrono::duration<float>>(std::chrono::system_clock::now() - clock).count();
+        g_DeltaTime = g_CurrentTime - g_PreviousTime;
+
         events.clear();
 
         auto event = SDL_Event {};

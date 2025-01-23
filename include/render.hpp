@@ -37,7 +37,7 @@ public:
     void                                    LoadScene(const Scene &);
     void                                    Update();
 
-    SDL_GLContext                         m_Context;
+    SDL_GLContext                           m_Context;
 
 private:
     void                                    LightingPass();

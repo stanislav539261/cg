@@ -14,7 +14,6 @@ Ui::Ui() {
 
     auto &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.MouseDrawCursor = true;
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -45,8 +44,13 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
+        auto &io = ImGui::GetIO();
+
         if (m_ShowMenu) {
+            io.MouseDrawCursor = true;
             m_Menu->Show();
+        } else {
+            io.MouseDrawCursor = false;
         }
 
         ImGui::Render();

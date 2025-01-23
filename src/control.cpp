@@ -29,8 +29,10 @@ void Control::Update(const std::vector<SDL_Event> &events) {
         } else if (event.type == SDL_KEYUP) {
             m_KeysPressedRepeat.erase(event.key.keysym.sym);
         } else if (event.type == SDL_MOUSEMOTION) {
-            pitchOffset -= event.motion.yrel * MOUSE_SENSITIVITY;
-            yawOffset += event.motion.xrel * MOUSE_SENSITIVITY;
+            if (g_Ui && !g_Ui->m_ShowMenu) {
+                pitchOffset -= event.motion.yrel * MOUSE_SENSITIVITY;
+                yawOffset += event.motion.xrel * MOUSE_SENSITIVITY;
+            }
         }
     }
 
@@ -39,7 +41,7 @@ void Control::Update(const std::vector<SDL_Event> &events) {
     for (const auto &key : m_KeysPressedOnce) {
         switch (key) {
             case SDLK_F1:
-                if (g_Ui && g_Ui->m_Menu) {
+                if (g_Ui) {
                     g_Ui->m_ShowMenu = !g_Ui->m_ShowMenu;
                 }
                 break;

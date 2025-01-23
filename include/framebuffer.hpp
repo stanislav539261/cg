@@ -26,6 +26,7 @@ public:
     void    ClearColor(GLuint, GLfloat, GLfloat, GLfloat, GLfloat);
     void    ClearDepth(GLuint, GLfloat);
     void    SetAttachment(GLenum, const std::shared_ptr<Texture2D> &);
+    void    SetAttachment(GLenum, const std::shared_ptr<Texture2DArray> &);
 
     GLuint  m_Handle;
 };

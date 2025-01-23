@@ -315,10 +315,6 @@ void Render::Update() {
     // Draw scene
     LightingPass();
     ScreenPass();
-
-    if (g_Window) {
-        SDL_GL_SwapWindow(g_Window->m_Window);
-    }
 }
 
 void Render::LightingPass() {

@@ -25,5 +25,5 @@ Window::~Window() {
 }
 
 void Window::Update() {
-    
+    SDL_GL_SwapWindow(g_Window->m_Window);
 }

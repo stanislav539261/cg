@@ -8,6 +8,7 @@
 #include "render.hpp"
 #include "scene.hpp"
 #include "state.hpp"
+#include "ui.hpp"
 #include "window.hpp"
 
 int main(int argc, char **argv) {
@@ -37,6 +38,7 @@ int main(int argc, char **argv) {
     g_Control = std::shared_ptr<Control>(new Control());
     g_MainCamera = std::shared_ptr<Camera>(new Camera(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f)));
     g_Render = std::shared_ptr<Render>(new Render());
+    g_Ui = std::shared_ptr<Ui>(new Ui());
 
     auto clock = std::chrono::system_clock::now();
     auto events = std::vector<SDL_Event>();
@@ -69,9 +71,11 @@ int main(int argc, char **argv) {
 
         g_Control->Update(events);
         g_Render->Update();
+        g_Ui->Update(events);
         g_Window->Update();    
     }
 
+    g_Ui = nullptr;
     g_Render = nullptr;
     g_Window = nullptr;
     return 0;

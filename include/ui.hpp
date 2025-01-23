@@ -15,6 +15,7 @@ public:
     void                    Update(const std::vector<SDL_Event> &);
 
     std::shared_ptr<Menu>   m_Menu;
+    bool                    m_ShowMenu;
 };
 
 extern std::shared_ptr<Ui> g_Ui;

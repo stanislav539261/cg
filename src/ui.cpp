@@ -26,6 +26,7 @@ Ui::Ui() {
     }
 
     m_Menu = std::shared_ptr<Menu>(new Menu());
+    m_ShowMenu = false;
 }
 
 Ui::~Ui() {
@@ -44,7 +45,9 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
 
-        m_Menu->Show();
+        if (m_ShowMenu) {
+            m_Menu->Show();
+        }
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

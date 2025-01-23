@@ -24,6 +24,8 @@ Ui::Ui() {
         ImGui_ImplSDL2_InitForOpenGL(g_Window->m_Window, g_Render->m_Context);
         ImGui_ImplOpenGL3_Init("#version 460");
     }
+
+    m_Menu = std::shared_ptr<Menu>(new Menu());
 }
 
 Ui::~Ui() {
@@ -37,14 +39,14 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
         ImGui_ImplSDL2_ProcessEvent(&event);
     }
 
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame();
-    ImGui::NewFrame();
+    if (g_Render && g_Render->m_Context && g_Window && g_Window->m_Window) {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
 
-    bool showDemoWindow = true;
+        m_Menu->Show();
 
-    ImGui::ShowDemoWindow(&showDemoWindow);
-
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 }

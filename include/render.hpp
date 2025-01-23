@@ -38,6 +38,7 @@ public:
     void                                    Update();
 
     SDL_GLContext                           m_Context;
+    bool                                    m_EnableReverseZ;
 
 private:
     void                                    LightingPass();
@@ -47,7 +48,6 @@ private:
     std::shared_ptr<Texture2D>              m_DepthTexture2D;
     std::shared_ptr<Texture2DArray>         m_DiffuseTexture2DArray;
     std::shared_ptr<DrawIndirectBuffer>     m_DrawIndirectBuffer;
-    bool                                    m_EnableReverseZ;
     std::shared_ptr<Buffer<GpuIndex>>       m_IndexBuffer;
     std::shared_ptr<Framebuffer>            m_LightingFramebuffer;
     std::shared_ptr<ShaderProgram>          m_LightingShaderProgram;

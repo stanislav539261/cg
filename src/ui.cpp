@@ -14,6 +14,7 @@ Ui::Ui() {
 
     auto &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.MouseDrawCursor = true;
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();

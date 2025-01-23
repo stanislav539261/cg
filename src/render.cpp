@@ -250,6 +250,7 @@ void Render::LoadScene(const Scene &scene) {
 
     auto drawIndirectBuffer = std::shared_ptr<DrawIndirectBuffer>(new DrawIndirectBuffer(scene.m_Meshes.size()));
     auto indexBuffer = std::shared_ptr<Buffer<GpuIndex>>(new Buffer<GpuIndex>(scene.NumIndices()));
+    auto lightEnvironmentBuffer = std::shared_ptr<Buffer<GpuLightEnvironment>>(new Buffer<GpuLightEnvironment>());
     auto vertexBuffer = std::shared_ptr<Buffer<GpuVertex>>(new Buffer<GpuVertex>(scene.NumVertices()));
 
     auto meshes = std::vector<std::tuple<GLuint, GLuint>>();
@@ -289,6 +290,7 @@ void Render::LoadScene(const Scene &scene) {
     m_DiffuseTexture2DArray = diffuseTexture2DArray;
     m_DrawIndirectBuffer = drawIndirectBuffer;
     m_IndexBuffer = indexBuffer;
+    m_LightEnvironmentBuffer = lightEnvironmentBuffer;
     m_MaterialBuffer = materialBuffer;
     m_Meshes = meshes;
     m_MetalnessTexture2DArray = metalnessTexture2DArray;
@@ -309,8 +311,17 @@ void Render::Update() {
         .m_Projection = g_MainCamera->Projection(m_EnableReverseZ),
         .m_View = g_MainCamera->View(),
     };
+    auto gpuLightEnvironment = GpuLightEnvironment {
+        .m_AmbientColor = glm::vec3(0.05f),
+        .m_BaseColor = glm::vec3(1.f),
+        .m_Direction = glm::vec3(0.545847f, -0.823136f, 0.156519f),
+    };
 
     m_CameraBuffer->SetData(gpuCamera, 0);
+
+    if (m_LightEnvironmentBuffer) {
+        m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
+    }
 
     // Draw scene
     LightingPass();
@@ -342,11 +353,14 @@ void Render::LightingPass() {
     if (m_IndexBuffer) {
         m_IndexBuffer->Bind(1);
     }
+    if (m_LightEnvironmentBuffer) {
+        m_LightEnvironmentBuffer->Bind(2);
+    }
     if (m_MaterialBuffer) {
-        m_MaterialBuffer->Bind(2);
+        m_MaterialBuffer->Bind(3);
     }
     if (m_VertexBuffer) {
-        m_VertexBuffer->Bind(3);
+        m_VertexBuffer->Bind(4);
     }
 
     if (m_DiffuseTexture2DArray) {

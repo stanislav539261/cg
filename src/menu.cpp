@@ -3,8 +3,7 @@
 #include "menu.hpp"
 
 Menu::Menu() {
-    m_ShowAnotherWindow = true;
-    m_ShowDemoWindow = true;
+    
 }
 
 Menu::~Menu() {

@@ -7,9 +7,6 @@ public:
     ~Menu();
 
     void        Show();
-
-    bool        m_ShowAnotherWindow;
-    bool        m_ShowDemoWindow;
 };
 
 #endif /* MENU_HPP */

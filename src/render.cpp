@@ -91,71 +91,87 @@ static void GLAPIENTRY DebugMessageCallback(
     throw std::runtime_error("error");
 }
 
-Render::Render() {
-    glEnable(GL_DEPTH_CLAMP);
-    glEnable(GL_DEBUG_OUTPUT);;
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glEnable(GL_SCISSOR_TEST);
-    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
-    glDebugMessageCallback(DebugMessageCallback, nullptr);
+Render::Render(SDL_Window *window) {
+    m_Context = SDL_GL_CreateContext(window);
 
-    // Bind empty vertex array object to avoid crash
-    auto emptyVAO = 0u;
+    if (m_Context) {
+        auto result = glewInit();
 
-    glGenVertexArrays(1, &emptyVAO);
-    glBindVertexArray(emptyVAO);
+        if (result == GLEW_OK) {
+            glEnable(GL_DEPTH_CLAMP);
+            glEnable(GL_DEBUG_OUTPUT);;
+            glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+            glEnable(GL_SCISSOR_TEST);
+            glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+            glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+            glDebugMessageCallback(DebugMessageCallback, nullptr);
 
-    m_EnableReverseZ = true;
+            // Bind empty vertex array object to avoid crash
+            auto emptyVAO = 0u;
 
-    // Create buffers
-    auto cameraBuffer = std::shared_ptr<Buffer<GpuCamera>>(new Buffer<GpuCamera>());
+            glGenVertexArrays(1, &emptyVAO);
+            glBindVertexArray(emptyVAO);
 
-    // Create samplers
-    auto samplerWrap = std::shared_ptr<Sampler>(new Sampler());
-    samplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
-    samplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
-    samplerWrap->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
-    samplerWrap->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
-    samplerWrap->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
-    samplerWrap->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
-    samplerWrap->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
+            m_EnableReverseZ = true;
 
-    // Create textures
-    auto depthTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_DEPTH_COMPONENT32F));
-    auto lightingTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_RGB16F));
+            // Create buffers
+            auto cameraBuffer = std::shared_ptr<Buffer<GpuCamera>>(new Buffer<GpuCamera>());
 
-    // Create framebuffers
-    auto lightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
-    lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture);
-    lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
+            // Create samplers
+            auto samplerWrap = std::shared_ptr<Sampler>(new Sampler());
+            samplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            samplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            samplerWrap->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            samplerWrap->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            samplerWrap->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
+            samplerWrap->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
+            samplerWrap->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
-    auto screenFramebuffer = std::shared_ptr<DefaultFramebuffer>(new DefaultFramebuffer());
+            // Create textures
+            auto depthTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_DEPTH_COMPONENT32F));
+            auto lightingTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_RGB16F));
 
-    // Create shader programs
-    auto lightingShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
-    assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
-    assert(lightingShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/lighting.frag"));
+            // Create framebuffers
+            auto lightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture);
+            lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
 
-    auto screenShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
-    assert(screenShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/screen.vert"));
-    assert(screenShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/screen.frag"));
+            auto screenFramebuffer = std::shared_ptr<DefaultFramebuffer>(new DefaultFramebuffer());
 
-    m_CameraBuffer = cameraBuffer;
-    m_DepthTexture2D = depthTexture;
-    m_LightingFramebuffer = lightingFramebuffer;
-    m_LightingShaderProgram = lightingShaderProgram;
-    m_LightingTexture2D = lightingTexture;
-    m_SamplerWrap = samplerWrap;
-    m_ScreenFramebuffer = screenFramebuffer;
-    m_ScreenShaderProgram = screenShaderProgram;
+            // Create shader programs
+            auto lightingShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
+            assert(lightingShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/lighting.frag"));
+
+            auto screenShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(screenShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/screen.vert"));
+            assert(screenShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/screen.frag"));
+
+            m_CameraBuffer = cameraBuffer;
+            m_DepthTexture2D = depthTexture;
+            m_LightingFramebuffer = lightingFramebuffer;
+            m_LightingShaderProgram = lightingShaderProgram;
+            m_LightingTexture2D = lightingTexture;
+            m_SamplerWrap = samplerWrap;
+            m_ScreenFramebuffer = screenFramebuffer;
+            m_ScreenShaderProgram = screenShaderProgram;
+        } else {
+            std::cout << "Can't initialize GLEW. " << glewGetErrorString(result) << std::endl;
+        }
+    } else {
+        std::cout << "Context could not be created. " << SDL_GetError() << std::endl;
+    }
 }
 
 Render::~Render() {
-    
+    SDL_GL_DeleteContext(m_Context);
 }
 
 void Render::LoadScene(const Scene &scene) {
+    if (!m_Context) {
+        return;
+    }
+
     auto diffuseImages = std::vector<std::shared_ptr<Image>>();
     auto metalnessImages = std::vector<std::shared_ptr<Image>>();
     auto normalImages = std::vector<std::shared_ptr<Image>>();
@@ -273,6 +289,10 @@ void Render::LoadScene(const Scene &scene) {
 }
 
 void Render::Update() {
+    if (!m_Context) {
+        return;
+    }
+
     // Update camera
     assert(g_MainCamera);
 

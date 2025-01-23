@@ -4,6 +4,7 @@
 #include <memory>
 
 #include <GL/glew.h> 
+#include <SDL2/SDL_video.h>
 
 #include "buffer.hpp"
 #include "framebuffer.hpp"
@@ -30,11 +31,13 @@ typedef Vertex GpuVertex;
 
 class Render {
 public:
-    Render();
+    Render(SDL_Window *);
     ~Render();
 
     void                                    LoadScene(const Scene &);
     void                                    Update();
+
+    SDL_GLContext                         m_Context;
 
 private:
     void                                    LightingPass();

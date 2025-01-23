@@ -1,9 +1,7 @@
 #include <cstring>
 #include <iostream>
 
-#include <GL/glew.h>
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
 
 #include "camera.hpp"
 #include "control.hpp"
@@ -49,22 +47,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    auto context = SDL_GL_CreateContext(window);
-
-    if (!context) {
-        std::cout << "Window could not be created. " << SDL_GetError() << std::endl;
-        return 0;
-    }
-
-    auto err = glewInit();
-
-    if (GLEW_OK != err) {
-		std::cout << "Can't initialize GLEW. " << glewGetErrorString(err) << std::endl;
-		SDL_DestroyWindow(window);
-        return 0;
-	}
-
-    auto render = Render();
+    auto render = Render(window);
     auto aspectRatio = g_ScreenWidth / static_cast<float>(g_ScreenHeight);
 
     g_Control = std::shared_ptr<Control>(new Control());

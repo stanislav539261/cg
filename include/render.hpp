@@ -31,7 +31,7 @@ typedef Vertex GpuVertex;
 
 class Render {
 public:
-    Render(SDL_Window *);
+    Render();
     ~Render();
 
     void                                    LoadScene(const Scene &);

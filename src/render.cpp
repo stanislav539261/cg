@@ -3,6 +3,7 @@
 #include "camera.hpp"
 #include "render.hpp"
 #include "state.hpp"
+#include "window.hpp"
 
 constexpr GLfloat COLOR_ONE[] = { 1.f, 1.f, 1.f, 1.f };
 constexpr GLfloat COLOR_ZERO[] = { 0.f, 0.f, 0.f, 0.f };
@@ -93,8 +94,10 @@ static void GLAPIENTRY DebugMessageCallback(
     throw std::runtime_error("error");
 }
 
-Render::Render(SDL_Window *window) {
-    m_Context = SDL_GL_CreateContext(window);
+Render::Render() {
+    if (g_Window) {
+        m_Context = SDL_GL_CreateContext(g_Window->m_Window);
+    }
 
     if (m_Context) {
         auto result = glewInit();
@@ -308,6 +311,10 @@ void Render::Update() {
     // Draw scene
     LightingPass();
     ScreenPass();
+
+    if (g_Window) {
+        SDL_GL_SwapWindow(g_Window->m_Window);
+    }
 }
 
 void Render::LightingPass() {

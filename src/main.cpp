@@ -8,6 +8,7 @@
 #include "render.hpp"
 #include "scene.hpp"
 #include "state.hpp"
+#include "window.hpp"
 
 int main(int argc, char **argv) {
     auto filename = "scenes/sponza.obj";
@@ -33,25 +34,13 @@ int main(int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-    auto window = SDL_CreateWindow(
-        "cg", 
-        SDL_WINDOWPOS_CENTERED, 
-        SDL_WINDOWPOS_CENTERED, 
-        g_ScreenWidth, 
-        g_ScreenHeight, 
-        SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN
-    );
-
-    if (!window) {
-        std::cout << "Window could not be created. " << SDL_GetError() << std::endl;
-        return 0;
-    }
+    g_Window = std::shared_ptr<Window>(new Window());
 
     auto aspectRatio = g_ScreenWidth / static_cast<float>(g_ScreenHeight);
 
     g_Control = std::shared_ptr<Control>(new Control());
     g_MainCamera = std::shared_ptr<Camera>(new Camera(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f)));
-    g_Render = std::shared_ptr<Render>(new Render(window));
+    g_Render = std::shared_ptr<Render>(new Render());
 
     auto clock = std::chrono::system_clock::now();
     auto events = std::vector<SDL_Event>();
@@ -84,12 +73,10 @@ int main(int argc, char **argv) {
 
         g_Control->Update(events);
         g_Render->Update();
-
-        SDL_GL_SwapWindow(window);
+        g_Window->Update();    
     }
 
     g_Render = nullptr;
-
-    SDL_DestroyWindow(window);
+    g_Window = nullptr;
     return 0;
 }

@@ -11,7 +11,8 @@ public:
 
     void                        Update(const std::vector<SDL_Event> &);
 
-    std::set<unsigned int>      m_KeysPressed;
+    std::set<unsigned int>      m_KeysPressedRepeat;
+    std::set<unsigned int>      m_KeysPressedOnce;
 };
 
 extern std::shared_ptr<Control> g_Control; 

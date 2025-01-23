@@ -18,12 +18,15 @@ void Control::Update(const std::vector<SDL_Event> &events) {
 
     auto pitchOffset = 0.f;
     auto yawOffset = 0.f;
+    
+    m_KeysPressedRepeat.insert(std::begin(m_KeysPressedOnce), std::end(m_KeysPressedOnce));
+    m_KeysPressedOnce.clear();
 
     for (const auto &event : events) {
         if (event.type == SDL_KEYDOWN) {
-            m_KeysPressed.insert(event.key.keysym.sym);
+            m_KeysPressedOnce.insert(event.key.keysym.sym);
         } else if (event.type == SDL_KEYUP) {
-            m_KeysPressed.erase(event.key.keysym.sym);
+            m_KeysPressedRepeat.erase(event.key.keysym.sym);
         } else if (event.type == SDL_MOUSEMOTION) {
             pitchOffset -= event.motion.yrel * MOUSE_SENSITIVITY;
             yawOffset += event.motion.xrel * MOUSE_SENSITIVITY;
@@ -32,7 +35,7 @@ void Control::Update(const std::vector<SDL_Event> &events) {
 
     auto direction = glm::vec3(0.f);
 
-    for (const auto &key : m_KeysPressed) {
+    for (const auto &key : m_KeysPressedRepeat) {
         switch (key) {
             case SDLK_w:
                 direction.z += 1.f;

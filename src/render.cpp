@@ -9,6 +9,8 @@ constexpr GLfloat COLOR_ZERO[] = { 0.f, 0.f, 0.f, 0.f };
 constexpr GLfloat DEPTH_ONE[] = { 1.f };
 constexpr GLfloat DEPTH_ZERO[] = { 0.f };
 
+std::shared_ptr<Render> g_Render = nullptr;
+
 static void GLAPIENTRY DebugMessageCallback(
     GLenum source, 
     GLenum type, 

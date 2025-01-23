@@ -63,4 +63,6 @@ private:
     std::shared_ptr<Buffer<GpuVertex>>      m_VertexBuffer;
 };
 
+extern std::shared_ptr<Render> g_Render;
+
 #endif /* RENDER_HPP */

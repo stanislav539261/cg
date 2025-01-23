@@ -47,17 +47,17 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    auto render = Render(window);
     auto aspectRatio = g_ScreenWidth / static_cast<float>(g_ScreenHeight);
 
     g_Control = std::shared_ptr<Control>(new Control());
     g_MainCamera = std::shared_ptr<Camera>(new Camera(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f)));
-
-    render.LoadScene(Scene(g_ResourcePath / std::filesystem::path(filename)));
+    g_Render = std::shared_ptr<Render>(new Render(window));
 
     auto clock = std::chrono::system_clock::now();
     auto events = std::vector<SDL_Event>();
     auto quit = false;
+
+    g_Render->LoadScene(Scene(g_ResourcePath / std::filesystem::path(filename)));
 
     while (!quit) {
         g_PreviousTime = g_CurrentTime;
@@ -83,11 +83,12 @@ int main(int argc, char **argv) {
         SDL_SetRelativeMouseMode(SDL_TRUE);
 
         g_Control->Update(events);
-
-        render.Update();
+        g_Render->Update();
 
         SDL_GL_SwapWindow(window);
     }
+
+    g_Render = nullptr;
 
     SDL_DestroyWindow(window);
     return 0;

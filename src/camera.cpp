@@ -29,7 +29,7 @@ Camera::~Camera() {
 
 }
 
-glm::vec3 Camera::Forward() {
+glm::vec3 Camera::Forward() const {
     return glm::normalize(glm::vec3(
         cos(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch)),
         sin(glm::radians(m_Pitch)),
@@ -37,7 +37,7 @@ glm::vec3 Camera::Forward() {
     ));
 }
 
-glm::mat4 Camera::Projection(bool reversedZ) {
+glm::mat4 Camera::Projection(bool reversedZ) const {
     auto fovY = glm::radians(m_FovY);
     auto halfFovY = fovY * 0.5f;
     auto v = glm::tan(halfFovY);
@@ -61,7 +61,7 @@ void Camera::Translate(const glm::vec3 &direction) {
     m_Position += speed * glm::normalize(glm::cross(forward, m_Up)) * direction.x;
 }
 
-glm::mat4 Camera::View() {
+glm::mat4 Camera::View() const {
     auto forward = Forward();
 
     return glm::lookAt(m_Position, m_Position + forward, m_Up);

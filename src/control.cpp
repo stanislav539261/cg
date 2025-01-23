@@ -51,7 +51,7 @@ void Control::Update(const std::vector<SDL_Event> &events) {
         }
     }
 
-    g_MainCamera->m_Pitch += pitchOffset;
+    g_MainCamera->m_Pitch = glm::clamp(g_MainCamera->m_Pitch + pitchOffset, -89.f, 89.f);
     g_MainCamera->m_Yaw += yawOffset;
     g_MainCamera->Translate(direction);
 }

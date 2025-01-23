@@ -96,6 +96,10 @@ static void GLAPIENTRY DebugMessageCallback(
 
 Render::Render() {
     if (g_Window) {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
         m_Context = SDL_GL_CreateContext(g_Window->m_Window);
     }
 

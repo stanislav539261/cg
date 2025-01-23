@@ -30,10 +30,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
     g_Window = std::shared_ptr<Window>(new Window());
 
     auto aspectRatio = g_ScreenWidth / static_cast<float>(g_ScreenHeight);

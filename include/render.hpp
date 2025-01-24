@@ -17,8 +17,12 @@
 struct GpuCamera {
     glm::mat4   m_Projection;
     glm::mat4   m_View;
+    glm::vec3   m_Position;
+    float       m_Padding0;
     float       m_FarZ;
     float       m_NearZ;
+    float       m_Padding1;
+    float       m_Padding2;
 };
 
 typedef unsigned int GpuIndex;

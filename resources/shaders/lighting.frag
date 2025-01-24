@@ -21,10 +21,12 @@ struct Material {
 layout(std430, binding = 0) readonly buffer CameraBuffer {
     mat4  g_Projection;
     mat4  g_View;
+    vec3  g_CameraPos;
+    float m_Padding0;
     float g_FarZ;
     float g_NearZ;
-    float m_Padding0;
     float m_Padding1;
+    float m_Padding2;
 };
 
 layout(std430, binding = 2) readonly buffer LightEnvironmentBuffer {
@@ -147,12 +149,34 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
     return shadow;
 }
 
+mat3 CotangentFrame( vec3 N, vec3 p, vec2 uv ) {
+    vec3 dp1 = dFdx(p);
+    vec3 dp2 = dFdy(p);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+ 
+    vec3 dp2perp = cross(dp2, N);
+    vec3 dp1perp = cross(N, dp1);
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+ 
+    float invmax = inversesqrt(max( dot(T,T), dot(B,B)));
+
+    return mat3(T * invmax, B * invmax, N);
+}
+
 void main() {
-    uint diffuseMap = g_Materials[VS_Output.m_Material].m_DiffuseMap;
-    vec4 diffuseColor = texture(g_DiffuseTextures, vec3(VS_Output.m_Texcoord, diffuseMap));
+    uint material = VS_Output.m_Material;
+    vec2 texcoord = VS_Output.m_Texcoord;
+
+    uint diffuseMap = g_Materials[material].m_DiffuseMap;
+    vec4 diffuseColor = texture(g_DiffuseTextures, vec3(texcoord, diffuseMap));
+    uint normalMap = g_Materials[material].m_NormalMap;
+    vec4 normalColor = texture(g_NormalTextures, vec3(texcoord, normalMap));
 
     vec3 fragPos = VS_Output.m_FragPos;
-    vec3 normal = normalize(VS_Output.m_Normal);
+    vec3 viewPos = g_CameraPos - fragPos;
+    vec3 normal = normalize(CotangentFrame(VS_Output.m_Normal, -viewPos, texcoord) * normalColor.rgb);
     vec3 lightDir = normalize(-g_LightEnvironment.m_Direction);  
     float diff = max(dot(normal, lightDir), 0.f);
 

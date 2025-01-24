@@ -354,6 +354,7 @@ void Render::Update() {
     auto gpuCamera = GpuCamera {
         .m_Projection = cameraProjection,
         .m_View = cameraView,
+        .m_Position = g_Camera->m_Position,
         .m_FarZ = g_Camera->m_FarZ,
         .m_NearZ = g_Camera->m_NearZ,
     };

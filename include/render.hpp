@@ -56,10 +56,13 @@ public:
 
 private:
     void                                            ShadowCsmPass();
+    void                                            DepthPass();
     void                                            LightingPass();
     void                                            ScreenPass();
     
     std::shared_ptr<Buffer<GpuCamera>>              m_CameraBuffer;
+    std::shared_ptr<Framebuffer>                    m_DepthFramebuffer;
+    std::shared_ptr<ShaderProgram>                  m_DepthShaderProgram;
     std::shared_ptr<Texture2D>                      m_DepthTexture2D;
     std::shared_ptr<Texture2DArray>                 m_DiffuseTexture2DArray;
     std::shared_ptr<DrawIndirectBuffer>             m_DrawIndirectBuffer;

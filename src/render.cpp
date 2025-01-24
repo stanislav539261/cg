@@ -159,6 +159,9 @@ Render::Render() {
             auto shadowCsmDepthTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F));
 
             // Create framebuffers
+            auto depthFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            depthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
+
             auto lightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
             lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture);
             lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
@@ -170,6 +173,9 @@ Render::Render() {
             shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
 
             // Create shader programs
+            auto depthShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(depthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/depth.vert"));
+
             auto lightingShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
             assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
             assert(lightingShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/lighting.frag"));
@@ -184,6 +190,8 @@ Render::Render() {
             assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
 
             m_CameraBuffer = cameraBuffer;
+            m_DepthFramebuffer = depthFramebuffer;
+            m_DepthShaderProgram = depthShaderProgram;
             m_DepthTexture2D = depthTexture;
             m_LightingFramebuffer = lightingFramebuffer;
             m_LightingShaderProgram = lightingShaderProgram;
@@ -372,6 +380,7 @@ void Render::Update() {
 
     // Draw scene
     ShadowCsmPass();
+    DepthPass();
     LightingPass();
     ScreenPass();
 }
@@ -382,6 +391,7 @@ void Render::ShadowCsmPass() {
 
     glCullFace(GL_BACK);
     glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
+    glDepthMask(true);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
@@ -414,12 +424,51 @@ void Render::ShadowCsmPass() {
     }
 }
 
-void Render::LightingPass() {
+void Render::DepthPass() {
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
 
     glCullFace(GL_BACK);
     glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
+    glDepthMask(true);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glFrontFace(GL_CCW);
+
+    glScissor(0, 0, g_ScreenWidth, g_ScreenHeight);
+    glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
+
+    assert(m_DepthFramebuffer);
+    assert(m_DepthShaderProgram);
+
+    m_DepthFramebuffer->Bind();
+    m_DepthFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
+
+    if (m_CameraBuffer) {
+        m_CameraBuffer->Bind(0);
+    }
+    if (m_IndexBuffer) {
+        m_IndexBuffer->Bind(1);
+    }
+    if (m_VertexBuffer) {
+        m_VertexBuffer->Bind(2);
+    }
+
+    m_DepthShaderProgram->Use();
+
+    if (m_DrawIndirectBuffer) {
+        m_DrawIndirectBuffer->Bind();
+
+        glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
+    }
+}
+
+void Render::LightingPass() {
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+
+    glCullFace(GL_BACK);
+    glDepthFunc(GL_EQUAL);
+    glDepthMask(false);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
@@ -431,7 +480,6 @@ void Render::LightingPass() {
 
     m_LightingFramebuffer->Bind();
     m_LightingFramebuffer->ClearColor(0, 0.f, 0.f, 0.f, 1.f);
-    m_LightingFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
 
     if (m_CameraBuffer) {
         m_CameraBuffer->Bind(0);

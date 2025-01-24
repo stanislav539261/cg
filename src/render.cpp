@@ -337,29 +337,28 @@ void Render::Update() {
     }
 
     // Update camera
-    assert(g_MainCamera);
+    assert(g_Camera);
 
-    auto mainCameraProjection = g_MainCamera->Projection(m_EnableReverseZ);
-    auto mainCameraView = g_MainCamera->View();
-
+    auto cameraProjection = g_Camera->Projection(m_EnableReverseZ);
+    auto cameraView = g_Camera->View();
     auto gpuCamera = GpuCamera {
-        .m_Projection = mainCameraProjection,
-        .m_View = mainCameraView,
-        .m_FarZ = g_MainCamera->m_FarZ,
-        .m_NearZ = g_MainCamera->m_NearZ,
+        .m_Projection = cameraProjection,
+        .m_View = cameraView,
+        .m_FarZ = g_Camera->m_FarZ,
+        .m_NearZ = g_Camera->m_NearZ,
     };
 
     m_CameraBuffer->SetData(gpuCamera, 0);
 
     if (g_LightEnvironment && m_LightEnvironmentBuffer) {
         auto cascadeLevels = std::array<float, 4> {
-            g_MainCamera->m_FarZ * 1.f / 80.f,
-            g_MainCamera->m_FarZ * 1.f / 40.f,
-            g_MainCamera->m_FarZ * 1.f / 20.f,
-            g_MainCamera->m_FarZ * 1.f / 10.f,
+            g_Camera->m_FarZ * 1.f / 80.f,
+            g_Camera->m_FarZ * 1.f / 40.f,
+            g_Camera->m_FarZ * 1.f / 20.f,
+            g_Camera->m_FarZ * 1.f / 10.f,
         };
         auto gpuLightEnvironment = GpuLightEnvironment {
-            .m_CascadeViewProjections = g_LightEnvironment->CascadeViewProjections(*g_MainCamera, cascadeLevels, m_EnableReverseZ),
+            .m_CascadeViewProjections = g_LightEnvironment->CascadeViewProjections(*g_Camera, cascadeLevels, m_EnableReverseZ),
             .m_CascadePlaneDistances = cascadeLevels,
             .m_AmbientColor = g_LightEnvironment->m_AmbientColor,
             .m_BaseColor = g_LightEnvironment->m_BaseColor,

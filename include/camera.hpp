@@ -25,6 +25,6 @@ public:
     float       m_Yaw;
 };
 
-extern std::shared_ptr<Camera> g_MainCamera;
+extern std::shared_ptr<Camera> g_Camera;
 
 #endif /* CAMERA_HPP */

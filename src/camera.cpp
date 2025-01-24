@@ -4,7 +4,7 @@
 #include "camera.hpp"
 #include "state.hpp"
 
-std::shared_ptr<Camera> g_MainCamera = nullptr;
+std::shared_ptr<Camera> g_Camera = nullptr;
 
 Camera::Camera(
     float aspectRatio, 

@@ -1,6 +1,10 @@
+#include <array>
 #include <iostream>
 
+#include <glm/ext/matrix_transform.hpp>
+
 #include "camera.hpp"
+#include "light.hpp"
 #include "render.hpp"
 #include "state.hpp"
 #include "window.hpp"
@@ -9,6 +13,7 @@ constexpr GLfloat COLOR_ONE[] = { 1.f, 1.f, 1.f, 1.f };
 constexpr GLfloat COLOR_ZERO[] = { 0.f, 0.f, 0.f, 0.f };
 constexpr GLfloat DEPTH_ONE[] = { 1.f };
 constexpr GLfloat DEPTH_ZERO[] = { 0.f };
+constexpr GLuint SHADOW_SIZE = 2048;
 
 std::shared_ptr<Render> g_Render = nullptr;
 
@@ -127,6 +132,17 @@ Render::Render() {
             auto cameraBuffer = std::shared_ptr<Buffer<GpuCamera>>(new Buffer<GpuCamera>());
 
             // Create samplers
+            auto samplerShadowBorder = std::shared_ptr<Sampler>(new Sampler());
+            samplerShadowBorder->SetParameter(GL_TEXTURE_BORDER_COLOR, glm::vec4(1.f));
+            samplerShadowBorder->SetParameter(GL_TEXTURE_COMPARE_MODE, static_cast<GLenum>(GL_COMPARE_REF_TO_TEXTURE));
+            samplerShadowBorder->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            samplerShadowBorder->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            samplerShadowBorder->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            samplerShadowBorder->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
+            samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
+            samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
+
             auto samplerWrap = std::shared_ptr<Sampler>(new Sampler());
             samplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
             samplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
@@ -139,6 +155,8 @@ Render::Render() {
             // Create textures
             auto depthTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_DEPTH_COMPONENT32F));
             auto lightingTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_RGB16F));
+            auto shadowCsmColorTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F));
+            auto shadowCsmDepthTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F));
 
             // Create framebuffers
             auto lightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
@@ -146,6 +164,10 @@ Render::Render() {
             lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
 
             auto screenFramebuffer = std::shared_ptr<DefaultFramebuffer>(new DefaultFramebuffer());
+
+            auto shadowCsmFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            shadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, shadowCsmColorTexture2DArray);
+            shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
 
             // Create shader programs
             auto lightingShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
@@ -156,14 +178,24 @@ Render::Render() {
             assert(screenShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/screen.vert"));
             assert(screenShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/screen.frag"));
 
+            auto shadowCsmShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(shadowCsmShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_csm.vert"));
+            assert(shadowCsmShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_csm.geom"));
+            assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
+
             m_CameraBuffer = cameraBuffer;
             m_DepthTexture2D = depthTexture;
             m_LightingFramebuffer = lightingFramebuffer;
             m_LightingShaderProgram = lightingShaderProgram;
             m_LightingTexture2D = lightingTexture;
             m_SamplerWrap = samplerWrap;
+            m_SamplerShadowBorder = samplerShadowBorder;
             m_ScreenFramebuffer = screenFramebuffer;
             m_ScreenShaderProgram = screenShaderProgram;
+            m_ShadowCsmColorTexture2DArray = shadowCsmColorTexture2DArray;
+            m_ShadowCsmDepthTexture2DArray = shadowCsmDepthTexture2DArray;
+            m_ShadowCsmFramebuffer = shadowCsmFramebuffer;
+            m_ShadowCsmShaderProgram = shadowCsmShaderProgram;
         } else {
             std::cout << "Can't initialize GLEW. " << glewGetErrorString(result) << std::endl;
         }
@@ -307,25 +339,79 @@ void Render::Update() {
     // Update camera
     assert(g_MainCamera);
 
+    auto mainCameraProjection = g_MainCamera->Projection(m_EnableReverseZ);
+    auto mainCameraView = g_MainCamera->View();
+
     auto gpuCamera = GpuCamera {
-        .m_Projection = g_MainCamera->Projection(m_EnableReverseZ),
-        .m_View = g_MainCamera->View(),
-    };
-    auto gpuLightEnvironment = GpuLightEnvironment {
-        .m_AmbientColor = glm::vec3(0.05f),
-        .m_BaseColor = glm::vec3(1.f),
-        .m_Direction = glm::vec3(0.545847f, -0.823136f, 0.156519f),
+        .m_Projection = mainCameraProjection,
+        .m_View = mainCameraView,
+        .m_FarZ = g_MainCamera->m_FarZ,
+        .m_NearZ = g_MainCamera->m_NearZ,
     };
 
     m_CameraBuffer->SetData(gpuCamera, 0);
 
-    if (m_LightEnvironmentBuffer) {
+    if (g_LightEnvironment && m_LightEnvironmentBuffer) {
+        auto cascadeLevels = std::array<float, 4> {
+            g_MainCamera->m_FarZ * 1.f / 80.f,
+            g_MainCamera->m_FarZ * 1.f / 40.f,
+            g_MainCamera->m_FarZ * 1.f / 20.f,
+            g_MainCamera->m_FarZ * 1.f / 10.f,
+        };
+        auto gpuLightEnvironment = GpuLightEnvironment {
+            .m_CascadeViewProjections = g_LightEnvironment->CascadeViewProjections(*g_MainCamera, cascadeLevels, m_EnableReverseZ),
+            .m_CascadePlaneDistances = cascadeLevels,
+            .m_AmbientColor = g_LightEnvironment->m_AmbientColor,
+            .m_BaseColor = g_LightEnvironment->m_BaseColor,
+            .m_Direction = g_LightEnvironment->m_Direction,
+        };
+
         m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
     }
 
+    m_SamplerShadowBorder->SetParameter(GL_TEXTURE_COMPARE_FUNC, static_cast<GLenum>(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL));
+
     // Draw scene
+    ShadowCsmPass();
     LightingPass();
     ScreenPass();
+}
+
+void Render::ShadowCsmPass() {
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+
+    glCullFace(GL_BACK);
+    glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glFrontFace(GL_CCW);
+
+    glScissor(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+    glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+
+    assert(m_ShadowCsmFramebuffer);
+    assert(m_ShadowCsmShaderProgram);
+
+    m_ShadowCsmFramebuffer->Bind();
+    m_ShadowCsmFramebuffer->ClearColor(0, 0.f, 0.f, 0.f, 1.f);
+    m_ShadowCsmFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
+
+    if (m_IndexBuffer) {
+        m_IndexBuffer->Bind(0);
+    }
+    if (m_LightEnvironmentBuffer) {
+        m_LightEnvironmentBuffer->Bind(1);
+    }
+    if (m_VertexBuffer) {
+        m_VertexBuffer->Bind(2);
+    }
+
+    m_ShadowCsmShaderProgram->Use();
+
+    if (m_DrawIndirectBuffer) {
+        m_DrawIndirectBuffer->Bind();
+        m_DrawIndirectBuffer->Draw(GL_TRIANGLES, 0, m_Meshes.size());
+    }
 }
 
 void Render::LightingPass() {
@@ -375,8 +461,17 @@ void Render::LightingPass() {
     if (m_RoughnessTexture2DArray) {
         m_RoughnessTexture2DArray->Bind(3, *m_SamplerWrap);
     }
+    if (m_ShadowCsmColorTexture2DArray) {
+        m_ShadowCsmColorTexture2DArray->Bind(4, *m_SamplerShadowBorder);
+    }
+    if (m_ShadowCsmDepthTexture2DArray) {
+        m_ShadowCsmDepthTexture2DArray->Bind(5, *m_SamplerShadowBorder);
+    }
 
     m_LightingShaderProgram->Use();
+
+    glUniform1i(0, m_EnableReverseZ);
+    glUniform1f(1, 1.f / SHADOW_SIZE);
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();

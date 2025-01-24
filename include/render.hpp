@@ -1,6 +1,7 @@
 #ifndef RENDER_HPP
 #define RENDER_HPP
 
+#include <array>
 #include <memory>
 
 #include <GL/glew.h> 
@@ -16,17 +17,21 @@
 struct GpuCamera {
     glm::mat4   m_Projection;
     glm::mat4   m_View;
+    float       m_FarZ;
+    float       m_NearZ;
 };
 
 typedef unsigned int GpuIndex;
 
 struct GpuLightEnvironment {
-    glm::vec3   m_AmbientColor;
-    float       m_Padding0;  
-    glm::vec3   m_BaseColor;
-    float       m_Padding1;  
-    glm::vec3   m_Direction;
-    float       m_Padding2;
+    std::array<glm::mat4, 5>    m_CascadeViewProjections;
+    std::array<float, 4>        m_CascadePlaneDistances;
+    glm::vec3                   m_AmbientColor;
+    float                       m_Padding0;  
+    glm::vec3                   m_BaseColor;
+    float                       m_Padding1;  
+    glm::vec3                   m_Direction;
+    float                       m_Padding2;
 };
 
 struct GpuMaterial {
@@ -50,6 +55,7 @@ public:
     bool                                            m_EnableReverseZ;
 
 private:
+    void                                            ShadowCsmPass();
     void                                            LightingPass();
     void                                            ScreenPass();
     
@@ -67,9 +73,14 @@ private:
     std::shared_ptr<Texture2DArray>                 m_MetalnessTexture2DArray;
     std::shared_ptr<Texture2DArray>                 m_NormalTexture2DArray;
     std::shared_ptr<Texture2DArray>                 m_RoughnessTexture2DArray;
+    std::shared_ptr<Sampler>                        m_SamplerShadowBorder;
     std::shared_ptr<Sampler>                        m_SamplerWrap;
     std::shared_ptr<DefaultFramebuffer>             m_ScreenFramebuffer;
     std::shared_ptr<ShaderProgram>                  m_ScreenShaderProgram;
+    std::shared_ptr<Texture2DArray>                 m_ShadowCsmColorTexture2DArray;
+    std::shared_ptr<Texture2DArray>                 m_ShadowCsmDepthTexture2DArray;
+    std::shared_ptr<Framebuffer>                    m_ShadowCsmFramebuffer;
+    std::shared_ptr<ShaderProgram>                  m_ShadowCsmShaderProgram;
     std::shared_ptr<Buffer<GpuVertex>>              m_VertexBuffer;
 };
 

@@ -1,8 +1,12 @@
 #version 460 core
 
 layout(std430, binding = 0) readonly buffer CameraBuffer {
-    mat4 g_Projection;
-    mat4 g_View;
+    mat4  g_Projection;
+    mat4  g_View;
+    float g_FarZ;
+    float g_NearZ;
+    float m_Padding0;
+    float m_Padding1;
 };
 
 layout(std430, binding = 1) readonly buffer IndexBuffer {

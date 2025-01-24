@@ -27,6 +27,7 @@ void Control::Update(const std::vector<SDL_Event> &events) {
         if (event.type == SDL_KEYDOWN) {
             m_KeysPressedOnce.insert(event.key.keysym.sym);
         } else if (event.type == SDL_KEYUP) {
+            m_KeysPressedOnce.erase(event.key.keysym.sym);
             m_KeysPressedRepeat.erase(event.key.keysym.sym);
         } else if (event.type == SDL_MOUSEMOTION) {
             if (g_Ui && !g_Ui->m_ShowMenu) {

@@ -409,7 +409,8 @@ void Render::ShadowCsmPass() {
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();
-        m_DrawIndirectBuffer->Draw(GL_TRIANGLES, 0, m_Meshes.size());
+
+        glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
     }
 }
 
@@ -474,7 +475,8 @@ void Render::LightingPass() {
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();
-        m_DrawIndirectBuffer->Draw(GL_TRIANGLES, 0, m_Meshes.size());
+
+        glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
     }
 }
 

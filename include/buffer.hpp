@@ -61,7 +61,6 @@ public:
     DrawIndirectBuffer(GLsizei count) : Buffer<DrawIndirectCommand>(count) {};
 
     void    Bind();
-    void    Draw(GLenum, GLsizei, GLsizei);
 };
 
 #endif /* BUFFER_HPP */

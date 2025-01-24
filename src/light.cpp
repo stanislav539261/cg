@@ -6,10 +6,11 @@
 
 std::shared_ptr<LightEnvironment> g_LightEnvironment = nullptr;
 
-LightEnvironment::LightEnvironment(const glm::vec3 &ambientColor, const glm::vec3 &baseColor, const glm::vec3 &direction) {
+LightEnvironment::LightEnvironment(const glm::vec3 &ambientColor, const glm::vec3 &baseColor, float pitch, float yaw) {
     m_AmbientColor = ambientColor;
     m_BaseColor = baseColor;
-    m_Direction = direction;
+    m_Pitch = pitch;
+    m_Yaw = yaw;
 }
 
 LightEnvironment::~LightEnvironment() {
@@ -55,7 +56,7 @@ std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera &
         auto maxY = std::numeric_limits<float>::lowest();
         auto minZ = std::numeric_limits<float>::max();
         auto maxZ = std::numeric_limits<float>::lowest();
-        auto view = glm::lookAt(center + m_Direction, center, glm::vec3(0.f, 1.f, 0.f));
+        auto view = glm::lookAt(center + Forward(), center, glm::vec3(0.f, 1.f, 0.f));
 
         for (const auto& corner : corners) {
             auto trf = view * corner;
@@ -95,4 +96,12 @@ std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera &
     }
 
     return cascades;
+}
+
+glm::vec3 LightEnvironment::Forward() const {
+    return glm::normalize(glm::vec3(
+        cos(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch)),
+        sin(glm::radians(m_Pitch)),
+        sin(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch))
+    ));
 }

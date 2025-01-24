@@ -372,7 +372,7 @@ void Render::Update() {
             .m_CascadePlaneDistances = cascadeLevels,
             .m_AmbientColor = g_LightEnvironment->m_AmbientColor,
             .m_BaseColor = g_LightEnvironment->m_BaseColor,
-            .m_Direction = g_LightEnvironment->m_Direction,
+            .m_Direction = g_LightEnvironment->Forward(),
         };
 
         m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);

@@ -16,14 +16,16 @@ int main(int argc, char **argv) {
     auto filename = "scenes/sponza.obj";
 
     auto i = 0u;
+    auto height = 720;
+    auto width = 1280;
 
     for (; i < argc; i++) {
         if (std::strcmp(argv[i], "--scene") == 0) {
             filename = argv[++i];
         } else if (std::strcmp(argv[i], "--height") == 0) {
-            g_ScreenHeight = std::atoi(argv[++i]);
+            height = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--width") == 0) {
-            g_ScreenWidth = std::atoi(argv[++i]);
+            width = std::atoi(argv[++i]);
         }
     }
 
@@ -32,9 +34,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    g_Window = std::shared_ptr<Window>(new Window());
+    g_Window = std::shared_ptr<Window>(new Window(height, width));
 
-    auto aspectRatio = g_ScreenWidth / static_cast<float>(g_ScreenHeight);
+    auto aspectRatio = width / static_cast<float>(height);
 
     g_Camera = std::shared_ptr<Camera>(new Camera(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f)));
     g_Control = std::shared_ptr<Control>(new Control());

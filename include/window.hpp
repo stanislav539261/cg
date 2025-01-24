@@ -7,11 +7,13 @@
 
 class Window {
 public:
-    Window();
+    Window(unsigned int, unsigned int);
     ~Window();
 
     void            Update();
 
+    unsigned int    m_ScreenHeight;
+    unsigned int    m_ScreenWidth;
     SDL_Window *    m_Window;
 };
 

@@ -153,8 +153,10 @@ Render::Render() {
             samplerWrap->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
             // Create textures
-            auto depthTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_DEPTH_COMPONENT32F));
-            auto lightingTexture = std::shared_ptr<Texture2D>(new Texture2D(g_ScreenWidth, g_ScreenHeight, 1, GL_RGB16F));
+            auto height = g_Window->m_ScreenHeight;
+            auto width = g_Window->m_ScreenWidth;
+            auto depthTexture = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_DEPTH_COMPONENT32F));
+            auto lightingTexture = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_RGB16F));
             auto shadowCsmColorTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F));
             auto shadowCsmDepthTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F));
 
@@ -434,8 +436,8 @@ void Render::DepthPass() {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
-    glScissor(0, 0, g_ScreenWidth, g_ScreenHeight);
-    glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
+    glScissor(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
+    glViewport(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
 
     assert(m_DepthFramebuffer);
     assert(m_DepthShaderProgram);
@@ -472,8 +474,8 @@ void Render::LightingPass() {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
-    glScissor(0, 0, g_ScreenWidth, g_ScreenHeight);
-    glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
+    glScissor(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
+    glViewport(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
 
     assert(m_LightingFramebuffer);
     assert(m_LightingShaderProgram);
@@ -534,8 +536,8 @@ void Render::ScreenPass() {
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-    glScissor(0, 0, g_ScreenWidth, g_ScreenHeight);
-    glViewport(0, 0, g_ScreenWidth, g_ScreenHeight);
+    glScissor(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
+    glViewport(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
 
     assert(m_LightingTexture2D);
     assert(m_ScreenFramebuffer);

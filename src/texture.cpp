@@ -2,8 +2,44 @@
 
 #include "texture.hpp"
 
+void Texture::Bind(GLuint binding) {
+    glBindTextureUnit(binding, m_Handle);
+}
+
+void Texture::Bind(GLuint binding, const std::shared_ptr<const Sampler> &sampler) {
+    Bind(binding);
+
+    glBindSampler(binding, sampler->m_Handle);
+}
+
+void Texture::GenerateMipMaps() {
+    glGenerateTextureMipmap(m_Handle);
+}
+
+void Texture::SetParameter(GLenum pname, GLfloat param) {
+    glTextureParameterf(m_Handle, pname, param);
+}
+
+void Texture::SetParameter(GLenum pname, GLuint param) {
+    glTextureParameteri(m_Handle, pname, param);
+}
+
+void Texture::SetParameter(GLenum pname, const glm::vec2 &param) {
+    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+}
+
+void Texture::SetParameter(GLenum pname, const glm::vec3 &param) {
+    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+}
+
+void Texture::SetParameter(GLenum pname, const glm::vec4 &param) {
+    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+}
+
 Texture2D::Texture2D(GLuint width, GLuint height, GLuint mipLevel, GLuint format) {
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_Handle);
+    m_Target = GL_TEXTURE_2D;
+
+    glCreateTextures(m_Target, 1, &m_Handle);
     glTextureStorage2D(m_Handle, mipLevel, format, width, height);
 
     m_Format = format;
@@ -53,42 +89,10 @@ Texture2D::~Texture2D() {
     glDeleteTextures(1, &m_Handle);
 }
 
-void Texture2D::Bind(GLuint binding) {
-    glBindTextureUnit(binding, m_Handle);
-}
-
-void Texture2D::Bind(GLuint binding, const Sampler &sampler) {
-    Bind(binding);
-
-    glBindSampler(binding, sampler.m_Handle);
-}
-
-void Texture2D::GenerateMipMaps() {
-    glGenerateTextureMipmap(m_Handle);
-}
-
-void Texture2D::SetParameter(GLenum pname, GLfloat param) {
-    glTextureParameterf(m_Handle, pname, param);
-}
-
-void Texture2D::SetParameter(GLenum pname, GLuint param) {
-    glTextureParameteri(m_Handle, pname, param);
-}
-
-void Texture2D::SetParameter(GLenum pname, const glm::vec2 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-void Texture2D::SetParameter(GLenum pname, const glm::vec3 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-void Texture2D::SetParameter(GLenum pname, const glm::vec4 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
 Texture2DArray::Texture2DArray(GLuint width, GLuint height, GLuint depth, GLuint mipLevel, GLuint format) {
-    glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_Handle);
+    m_Target = GL_TEXTURE_2D_ARRAY;
+
+    glCreateTextures(m_Target, 1, &m_Handle);
     glTextureStorage3D(m_Handle, mipLevel, format, width, height, depth);
 
     m_Format = format;
@@ -160,35 +164,21 @@ Texture2DArray::~Texture2DArray() {
     glDeleteTextures(1, &m_Handle);
 }
 
-void Texture2DArray::Bind(GLuint binding) {
+void TextureView::Bind(GLuint binding) {
     glBindTextureUnit(binding, m_Handle);
 }
 
-void Texture2DArray::Bind(GLuint binding, const Sampler &sampler) {
-    glBindSampler(binding, sampler.m_Handle);
-    glBindTextureUnit(binding, m_Handle);
+void TextureView::Bind(GLuint binding, const std::shared_ptr<const Sampler> &sampler) {
+    Bind(binding);
+
+    glBindSampler(binding, sampler->m_Handle);
 }
 
-void Texture2DArray::GenerateMipMaps() {
-    glGenerateTextureMipmap(m_Handle);
+TextureView2D::TextureView2D(std::shared_ptr<const Texture> texture, GLuint minLevel, GLuint numLevels) {
+    glGenTextures(1, &m_Handle);
+    glTextureView(m_Handle, GL_TEXTURE_2D, texture->m_Handle, texture->m_Format, minLevel, numLevels, 0, 1);
 }
 
-void Texture2DArray::SetParameter(GLenum pname, GLfloat param) {
-    glTextureParameterf(m_Handle, pname, param);
-}
-
-void Texture2DArray::SetParameter(GLenum pname, GLuint param) {
-    glTextureParameteri(m_Handle, pname, param);
-}
-
-void Texture2DArray::SetParameter(GLenum pname, const glm::vec2 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-void Texture2DArray::SetParameter(GLenum pname, const glm::vec3 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-void Texture2DArray::SetParameter(GLenum pname, const glm::vec4 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+TextureView2D::~TextureView2D() {
+    glDeleteTextures(1, &m_Handle);
 }

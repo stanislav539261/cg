@@ -56,9 +56,9 @@ in VS_OUT {
 
 layout(location = 0) out vec4 outColor;
 
+const float M_PI = 3.1415926535897932384626433832795f;
 const uint NUM_CASCADES = 4;
 const mat4 PROJECTOR_BIAS = mat4(0.5f, 0.f, 0.f, 0.f, 0.f, 0.5f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.5f, 0.5f, 0.f, 1.f);
-
 const float SHADOW_AMOUNT = 0.3f;
 const float SHADOW_BIAS = 0.000008f;
 const vec2 SHADOW_POISSON[] = vec2[16](
@@ -149,20 +149,66 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
     return shadow;
 }
 
-mat3 CotangentFrame( vec3 N, vec3 p, vec2 uv ) {
+vec3 ComputeFresnelSchlick(vec3 F0, float cosTheta) {
+    return F0 + (vec3(1.f) - F0) * pow(1.f - cosTheta, 5.f);
+}
+
+float ComputeGeometrySchlickGGX(float cosLi, float cosLo, float roughness) {
+	float r = roughness + 1.f;
+	float k = (r * r) / 8.f;
+    float termLi = cosLi * 1.f / (cosLi * (1.f - k) + k);
+    float termLo = cosLo * 1.f / (cosLo * (1.f - k) + k);
+    
+	return termLi * termLo;
+}
+
+float ComputeNdfGGX(float cosLh, float roughness) {
+	float roughness2 = roughness * roughness;
+	float roughness4 = roughness2 * roughness2;
+	float denom = (cosLh * cosLh) * (roughness4 - 1.0) + 1.0;
+	return roughness4 / (M_PI * denom * denom);
+}
+
+vec3 ComputePBR(vec3 normal, vec3 lightDir, vec3 viewDir, vec3 F0, vec3 albedo, float metalness, float roughness) {
+    vec3 halfwayDir = normalize(viewDir + lightDir);
+
+    float cosLo = max(0.f, dot(normal, viewDir));
+    float cosLi = max(0.f, dot(normal, lightDir));
+    float cosLh = max(0.f, dot(normal, halfwayDir));
+
+    // Cook-Torrance BRDF
+    vec3 F = ComputeFresnelSchlick(F0, max(dot(halfwayDir, viewDir), 0.f));        
+    float NDF = ComputeNdfGGX(cosLi, roughness);   
+    float G = ComputeGeometrySchlickGGX(cosLi, cosLo, roughness);    
+    
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.f * max(dot(normal, viewDir), 0.f) * max(dot(normal, lightDir), 0.f) + 0.0001f;
+    vec3 specular = numerator / denominator;
+    
+    vec3 kD = mix(vec3(1.f) - F, vec3(0.f), metalness);      
+
+    const float EPSILON = 0.00001f;  
+        
+    vec3 diffuseBRDF = kD * albedo;
+    vec3 specularBRDF = (F * NDF * G) / max(EPSILON, 4.f * cosLi * cosLo);
+
+    return (diffuseBRDF + specularBRDF) * cosLi;
+}
+
+mat3 ComputeCotangentFrame(vec3 normal, vec3 p, vec2 uv) {
     vec3 dp1 = dFdx(p);
     vec3 dp2 = dFdy(p);
     vec2 duv1 = dFdx(uv);
     vec2 duv2 = dFdy(uv);
  
-    vec3 dp2perp = cross(dp2, N);
-    vec3 dp1perp = cross(N, dp1);
+    vec3 dp2perp = cross(dp2, normal);
+    vec3 dp1perp = cross(normal, dp1);
     vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
     vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
  
-    float invmax = inversesqrt(max( dot(T,T), dot(B,B)));
+    float invmax = inversesqrt(max(dot(T, T), dot(B, B)));
 
-    return mat3(T * invmax, B * invmax, N);
+    return mat3(T * invmax, B * invmax, normal);
 }
 
 void main() {
@@ -171,17 +217,24 @@ void main() {
 
     uint diffuseMap = g_Materials[material].m_DiffuseMap;
     vec4 diffuseColor = texture(g_DiffuseTextures, vec3(texcoord, diffuseMap));
+    uint metalnessMap = g_Materials[material].m_MetalnessMap;
+    vec4 metalnessColor = texture(g_MetalnessTextures, vec3(texcoord, metalnessMap));
     uint normalMap = g_Materials[material].m_NormalMap;
     vec4 normalColor = texture(g_NormalTextures, vec3(texcoord, normalMap));
+    uint roughnessMap = g_Materials[material].m_RoughnessMap;
+    vec4 roughnessColor = texture(g_RoughnessTextures, vec3(texcoord, roughnessMap));
 
     vec3 fragPos = VS_Output.m_FragPos;
     vec3 viewPos = g_CameraPos - fragPos;
-    vec3 normal = normalize(CotangentFrame(VS_Output.m_Normal, -viewPos, texcoord) * normalColor.rgb);
-    vec3 lightDir = normalize(-g_LightEnvironment.m_Direction);  
-    float diff = max(dot(normal, lightDir), 0.f);
+    vec3 normal = normalize(ComputeCotangentFrame(VS_Output.m_Normal, -viewPos, texcoord) * normalColor.rgb);
+    vec3 lightDir = -g_LightEnvironment.m_Direction;  
+    vec3 viewDir = normalize(viewPos);  
 
-    vec3 ambientLighting = g_LightEnvironment.m_AmbientColor * diffuseColor.rgb;
-    vec3 diffuseLighting = g_LightEnvironment.m_BaseColor * diffuseColor.rgb * diff;  
+    vec3 F0 = vec3(0.04f); 
+    F0 = mix(F0, diffuseColor.rgb, metalnessColor.r);   
 
-    outColor = vec4(ambientLighting + diffuseLighting * ComputeShadowCsm(fragPos, normal, lightDir), 1.f);
+    vec3 ambientLighting = (g_LightEnvironment.m_AmbientColor + vec3(0.2f)) * diffuseColor.rgb;
+    vec3 pbrLighting = g_LightEnvironment.m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, diffuseColor.rgb, metalnessColor.r, roughnessColor.r);  
+
+    outColor = vec4(ambientLighting + pbrLighting * ComputeShadowCsm(fragPos, normal, lightDir), 1.f);
 }

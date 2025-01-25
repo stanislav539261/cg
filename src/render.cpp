@@ -398,8 +398,8 @@ void Render::ShadowCsmPass() {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
-    glScissor(0, 0, SHADOW_SIZE, SHADOW_SIZE);
-    glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+    glScissor(0, 0, m_ShadowCsmColorTexture2DArray->m_Width, m_ShadowCsmColorTexture2DArray->m_Height);
+    glViewport(0, 0, m_ShadowCsmColorTexture2DArray->m_Width, m_ShadowCsmColorTexture2DArray->m_Height);
 
     assert(m_ShadowCsmFramebuffer);
     assert(m_ShadowCsmShaderProgram);
@@ -437,8 +437,8 @@ void Render::DepthPass() {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
-    glScissor(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
-    glViewport(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
+    glScissor(0, 0, m_DepthTexture2D->m_Width, m_DepthTexture2D->m_Height);
+    glViewport(0, 0, m_DepthTexture2D->m_Width, m_DepthTexture2D->m_Height);
 
     assert(m_DepthFramebuffer);
     assert(m_DepthShaderProgram);
@@ -475,8 +475,8 @@ void Render::LightingPass() {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glFrontFace(GL_CCW);
 
-    glScissor(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
-    glViewport(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
+    glScissor(0, 0, m_LightingTexture2D->m_Width, m_LightingTexture2D->m_Height);
+    glViewport(0, 0, m_LightingTexture2D->m_Width, m_LightingTexture2D->m_Height);
 
     assert(m_LightingFramebuffer);
     assert(m_LightingShaderProgram);

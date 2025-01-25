@@ -16,6 +16,12 @@ public:
 
     void    Bind(GLuint);
     void    Bind(GLuint, const Sampler &);
+    void    GenerateMipMaps();
+    void    SetParameter(GLenum, GLfloat);
+    void    SetParameter(GLenum, GLuint);
+    void    SetParameter(GLenum, const glm::vec2 &);
+    void    SetParameter(GLenum, const glm::vec3 &);
+    void    SetParameter(GLenum, const glm::vec4 &);
 
     GLuint  m_Handle;
     GLuint  m_Width;
@@ -32,6 +38,12 @@ public:
 
     void    Bind(GLuint);
     void    Bind(GLuint, const Sampler &);
+    void    GenerateMipMaps();
+    void    SetParameter(GLenum, GLfloat);
+    void    SetParameter(GLenum, GLuint);
+    void    SetParameter(GLenum, const glm::vec2 &);
+    void    SetParameter(GLenum, const glm::vec3 &);
+    void    SetParameter(GLenum, const glm::vec4 &);
     
     GLuint  m_Handle;
     GLuint  m_Width;

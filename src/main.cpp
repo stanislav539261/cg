@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
     g_Camera = std::shared_ptr<Camera>(new Camera(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f)));
     g_Control = std::shared_ptr<Control>(new Control());
-    g_LightEnvironment = std::shared_ptr<LightEnvironment>(new LightEnvironment(glm::vec3(0.05f), glm::vec3(1.f), 360.f - 85.f, 25.f));
+    g_LightEnvironment = std::shared_ptr<LightEnvironment>(new LightEnvironment(glm::vec3(0.25f), glm::vec3(1.f), 360.f - 85.f, 25.f));
     g_Render = std::shared_ptr<Render>(new Render());
     g_Ui = std::shared_ptr<Ui>(new Ui());
 

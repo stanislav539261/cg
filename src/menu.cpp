@@ -15,7 +15,10 @@ Menu::~Menu() {
 void Menu::Show() {
     ImGui::Begin("Menu");
     ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);
-    ImGui::SliderFloat("LightEnvironment Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
-    ImGui::SliderFloat("LightEnvironment Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
+    ImGui::SeparatorText("LightEnvironment");
+    ImGui::SliderFloat3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor), 0.f, 1.f);
+    ImGui::SliderFloat3("Base color", reinterpret_cast<float *>(&g_LightEnvironment->m_BaseColor), 0.f, 1.f);
+    ImGui::SliderFloat("Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
+    ImGui::SliderFloat("Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
     ImGui::End();
 }

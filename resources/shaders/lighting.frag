@@ -233,7 +233,7 @@ void main() {
     vec3 F0 = vec3(0.04f); 
     F0 = mix(F0, diffuseColor.rgb, metalnessColor.r);   
 
-    vec3 ambientLighting = (g_LightEnvironment.m_AmbientColor + vec3(0.2f)) * diffuseColor.rgb;
+    vec3 ambientLighting = g_LightEnvironment.m_AmbientColor * diffuseColor.rgb;
     vec3 pbrLighting = g_LightEnvironment.m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, diffuseColor.rgb, metalnessColor.r, roughnessColor.r);  
 
     outColor = vec4(ambientLighting + pbrLighting * ComputeShadowCsm(fragPos, normal, lightDir), 1.f);

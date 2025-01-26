@@ -137,16 +137,15 @@ Render::Render() {
             auto cameraBuffer = std::shared_ptr<Buffer<GpuCamera>>(new Buffer<GpuCamera>());
 
             // Create samplers
-            auto samplerShadowBorder = std::shared_ptr<Sampler>(new Sampler());
-            samplerShadowBorder->SetParameter(GL_TEXTURE_BORDER_COLOR, glm::vec4(1.f));
-            samplerShadowBorder->SetParameter(GL_TEXTURE_COMPARE_MODE, static_cast<GLenum>(GL_COMPARE_REF_TO_TEXTURE));
-            samplerShadowBorder->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
-            samplerShadowBorder->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
-            samplerShadowBorder->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
-            samplerShadowBorder->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
-            samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
-            samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
-            samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
+            auto samplerBorderWhite = std::shared_ptr<Sampler>(new Sampler());
+            samplerBorderWhite->SetParameter(GL_TEXTURE_BORDER_COLOR, glm::vec4(1.f));
+            samplerBorderWhite->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            samplerBorderWhite->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            samplerBorderWhite->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            samplerBorderWhite->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
+            samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
+            samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
             auto samplerClamp = std::shared_ptr<Sampler>(new Sampler());
             samplerClamp->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
@@ -301,9 +300,9 @@ Render::Render() {
             m_LightingFramebuffer = lightingFramebuffer;
             m_LightingShaderProgram = lightingShaderProgram;
             m_LightingTexture2D = lightingTexture2D;
+            m_SamplerBorderWhite = samplerBorderWhite;
             m_SamplerClamp = samplerClamp;
             m_SamplerWrap = samplerWrap;
-            m_SamplerShadowBorder = samplerShadowBorder;
             m_ScreenFramebuffer = screenFramebuffer;
             m_ScreenShaderProgram = screenShaderProgram;
             m_ShadowCsmColorTexture2DArray = shadowCsmColorTexture2DArray;
@@ -495,8 +494,6 @@ void Render::Update() {
 
         m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
     }
-
-    m_SamplerShadowBorder->SetParameter(GL_TEXTURE_COMPARE_FUNC, static_cast<GLenum>(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL));
 
     std::swap(m_AmbientOcclusionTemporalFramebuffer, m_LastAmbientOcclusionTemporalFramebuffer);
     std::swap(m_AmbientOcclusionTemporalTexture2D, m_LastAmbientOcclusionTemporalTexture2D);
@@ -832,8 +829,8 @@ void Render::LightingPass() {
     assert(m_ShadowCsmColorTexture2DArray);
     assert(m_ShadowCsmDepthTexture2DArray);
 
-    m_ShadowCsmColorTexture2DArray->Bind(5, m_SamplerShadowBorder);
-    m_ShadowCsmDepthTexture2DArray->Bind(6, m_SamplerShadowBorder);
+    m_ShadowCsmColorTexture2DArray->Bind(5, m_SamplerBorderWhite);
+    m_ShadowCsmDepthTexture2DArray->Bind(6, m_SamplerBorderWhite);
 
     m_LightingShaderProgram->Use();
 

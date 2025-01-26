@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include <glm/ext/matrix_transform.hpp>
+#include <random>
 
 #include "camera.hpp"
 #include "light.hpp"
@@ -108,6 +109,8 @@ Render::Render() {
         m_Context = SDL_GL_CreateContext(g_Window->m_Window);
     }
 
+    SDL_GL_SetSwapInterval(-1);
+
     if (m_Context) {
         auto result = glewInit();
 
@@ -126,7 +129,9 @@ Render::Render() {
             glGenVertexArrays(1, &emptyVAO);
             glBindVertexArray(emptyVAO);
 
+            m_EnableAmbientOcclusion = true;
             m_EnableReverseZ = true;
+            m_NumFrames = 0;
 
             // Create buffers
             auto cameraBuffer = std::shared_ptr<Buffer<GpuCamera>>(new Buffer<GpuCamera>());
@@ -143,6 +148,15 @@ Render::Render() {
             samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
             samplerShadowBorder->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
+            auto samplerClamp = std::shared_ptr<Sampler>(new Sampler());
+            samplerClamp->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            samplerClamp->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            samplerClamp->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            samplerClamp->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            samplerClamp->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
+            samplerClamp->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
+            samplerClamp->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
+
             auto samplerWrap = std::shared_ptr<Sampler>(new Sampler());
             samplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
             samplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
@@ -155,18 +169,64 @@ Render::Render() {
             // Create textures
             auto height = g_Window->m_ScreenHeight;
             auto width = g_Window->m_ScreenWidth;
-            auto depthTexture = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_DEPTH_COMPONENT32F));
-            auto lightingTexture = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_RGB16F));
+            auto minHeight = height;
+            auto minWidth = width;
+            auto mipLevel = 0u;
+
+            for (auto i = 0u; minHeight != 0 && minWidth != 0; i++) {
+                mipLevel++;
+                minHeight /= 2;
+                minWidth /= 2;
+            }
+
+            auto ambientOcclusionTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height , 1, GL_R16F));
+            auto ambientOcclusionSpartialTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_R16F));
+            auto ambientOcclusionTemporalTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_R16F));
+            auto depthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, mipLevel, GL_DEPTH_COMPONENT32F));
+            auto halfDepthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width / 2, height / 2, mipLevel - 1, GL_R32F));
+            auto halfVelocityTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width / 2, height / 2, mipLevel - 1, GL_RG16F));
+            auto lastAmbientOcclusionTemporalTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_R16F));
+            auto lastDepthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, mipLevel, GL_DEPTH_COMPONENT32F));
+            auto lastHalfDepthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width / 2, height / 2, mipLevel - 1, GL_R32F));
+            auto lightingTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_RGB16F));
             auto shadowCsmColorTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F));
             auto shadowCsmDepthTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F));
+            auto velocityTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, mipLevel, GL_RG16F));
 
             // Create framebuffers
+            auto ambientOcclusionFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            ambientOcclusionFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionTexture2D);
+
+            auto ambientOcclusionSpartialFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            ambientOcclusionSpartialFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionSpartialTexture2D);
+
+            auto ambientOcclusionTemporalFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            ambientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionTemporalTexture2D);
+
             auto depthFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
-            depthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
+            depthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
+
+            auto downsampleDepthVelocityFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            downsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, halfDepthTexture2D);
+            downsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT1, halfVelocityTexture2D);
+
+            auto lastAmbientOcclusionTemporalFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            lastAmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastAmbientOcclusionTemporalTexture2D);
+
+            auto lastDepthFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            lastDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
+
+            auto lastDownsampleDepthVelocityFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            lastDownsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastHalfDepthTexture2D);
+            lastDownsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT1, halfVelocityTexture2D);
+
+            auto lastLightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            lastLightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
+            lastLightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
 
             auto lightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
-            lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture);
-            lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture);
+            lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
+            lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
 
             auto screenFramebuffer = std::shared_ptr<DefaultFramebuffer>(new DefaultFramebuffer());
 
@@ -174,9 +234,28 @@ Render::Render() {
             shadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, shadowCsmColorTexture2DArray);
             shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
 
+            auto velocityFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            velocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, velocityTexture2D);
+
             // Create shader programs
+            auto ambientOcclusionShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(ambientOcclusionShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao.vert"));
+            assert(ambientOcclusionShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao.frag"));
+            
+            auto ambientOcclusionSpartialShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(ambientOcclusionSpartialShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_spartial.vert"));
+            assert(ambientOcclusionSpartialShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_spartial.frag"));
+
+            auto ambientOcclusionTemporalShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(ambientOcclusionTemporalShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_temporal.vert"));
+            assert(ambientOcclusionTemporalShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_temporal.frag"));
+
             auto depthShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
             assert(depthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/depth.vert"));
+
+            auto downsampleDepthVelocityShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(downsampleDepthVelocityShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/downsample_depth_velocity.vert"));
+            assert(downsampleDepthVelocityShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/downsample_depth_velocity.frag"));
 
             auto lightingShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
             assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
@@ -191,13 +270,38 @@ Render::Render() {
             assert(shadowCsmShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_csm.geom"));
             assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
 
+            auto velocityShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            assert(velocityShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/velocity.vert"));
+            assert(velocityShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/velocity.frag"));
+
+            m_AmbientOcclusionFramebuffer = ambientOcclusionFramebuffer;
+            m_AmbientOcclusionShaderProgram = ambientOcclusionShaderProgram;
+            m_AmbientOcclusionTexture2D = ambientOcclusionTexture2D;
+            m_AmbientOcclusionSpartialFramebuffer = ambientOcclusionSpartialFramebuffer;
+            m_AmbientOcclusionSpartialShaderProgram = ambientOcclusionSpartialShaderProgram;
+            m_AmbientOcclusionSpartialTexture2D = ambientOcclusionSpartialTexture2D;
+            m_AmbientOcclusionTemporalFramebuffer = ambientOcclusionTemporalFramebuffer;
+            m_AmbientOcclusionTemporalShaderProgram = ambientOcclusionTemporalShaderProgram;
+            m_AmbientOcclusionTemporalTexture2D = ambientOcclusionTemporalTexture2D;
             m_CameraBuffer = cameraBuffer;
             m_DepthFramebuffer = depthFramebuffer;
             m_DepthShaderProgram = depthShaderProgram;
-            m_DepthTexture2D = depthTexture;
+            m_DepthTexture2D = depthTexture2D;
+            m_DownsampleDepthVelocityFramebuffer = downsampleDepthVelocityFramebuffer;
+            m_DownsampleDepthVelocityShaderProgram = downsampleDepthVelocityShaderProgram;
+            m_HalfDepthTexture2D = halfDepthTexture2D;
+            m_HalfVelocityTexture2D = halfVelocityTexture2D;
+            m_LastAmbientOcclusionTemporalFramebuffer = lastAmbientOcclusionTemporalFramebuffer;
+            m_LastAmbientOcclusionTemporalTexture2D = lastAmbientOcclusionTemporalTexture2D;
+            m_LastDepthFramebuffer = lastDepthFramebuffer;
+            m_LastDepthTexture2D = lastDepthTexture2D;
+            m_LastDownsampleDepthVelocityFramebuffer = lastDownsampleDepthVelocityFramebuffer;
+            m_LastHalfDepthTexture2D = lastHalfDepthTexture2D;
+            m_LastLightingFramebuffer = lastLightingFramebuffer;
             m_LightingFramebuffer = lightingFramebuffer;
             m_LightingShaderProgram = lightingShaderProgram;
-            m_LightingTexture2D = lightingTexture;
+            m_LightingTexture2D = lightingTexture2D;
+            m_SamplerClamp = samplerClamp;
             m_SamplerWrap = samplerWrap;
             m_SamplerShadowBorder = samplerShadowBorder;
             m_ScreenFramebuffer = screenFramebuffer;
@@ -206,6 +310,9 @@ Render::Render() {
             m_ShadowCsmDepthTexture2DArray = shadowCsmDepthTexture2DArray;
             m_ShadowCsmFramebuffer = shadowCsmFramebuffer;
             m_ShadowCsmShaderProgram = shadowCsmShaderProgram;
+            m_VelocityFramebuffer = velocityFramebuffer;
+            m_VelocityShaderProgram = velocityShaderProgram;
+            m_VelocityTexture2D = velocityTexture2D;
         } else {
             std::cout << "Can't initialize GLEW. " << glewGetErrorString(result) << std::endl;
         }
@@ -350,13 +457,23 @@ void Render::Update() {
     assert(g_Camera);
 
     auto cameraProjection = g_Camera->Projection(m_EnableReverseZ);
+    auto cameraFovY = glm::radians(g_Camera->m_FovY);
+    auto cameraHalfFovY = cameraFovY * 0.5f;
+    auto cameraV = glm::tan(cameraHalfFovY);
+    auto cameraH = g_Camera->m_AspectRatio * cameraV;
+    auto cameraHalfFovX = glm::atan(cameraH);
+    auto cameraFovX = cameraHalfFovX * 2.f;
     auto cameraView = g_Camera->View();
+
     auto gpuCamera = GpuCamera {
         .m_Projection = cameraProjection,
+        .m_ProjectionInversed = glm::inverse(cameraProjection),
         .m_View = cameraView,
         .m_Position = g_Camera->m_Position,
         .m_FarZ = g_Camera->m_FarZ,
         .m_NearZ = g_Camera->m_NearZ,
+        .m_FovX = cameraFovX,
+        .m_FovY = cameraFovY,
     };
 
     m_CameraBuffer->SetData(gpuCamera, 0);
@@ -381,11 +498,25 @@ void Render::Update() {
 
     m_SamplerShadowBorder->SetParameter(GL_TEXTURE_COMPARE_FUNC, static_cast<GLenum>(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL));
 
+    std::swap(m_AmbientOcclusionTemporalFramebuffer, m_LastAmbientOcclusionTemporalFramebuffer);
+    std::swap(m_AmbientOcclusionTemporalTexture2D, m_LastAmbientOcclusionTemporalTexture2D);
+    std::swap(m_DepthFramebuffer, m_LastDepthFramebuffer);
+    std::swap(m_DepthTexture2D, m_LastDepthTexture2D);
+    std::swap(m_DownsampleDepthVelocityFramebuffer, m_LastDownsampleDepthVelocityFramebuffer);
+    std::swap(m_HalfDepthTexture2D, m_LastHalfDepthTexture2D);
+    std::swap(m_LightingFramebuffer, m_LastLightingFramebuffer);
+
     // Draw scene
     ShadowCsmPass();
     DepthPass();
+    DownsampleDepthVelocityPass();
+    AmbientOcclusionPass();
+    AmbientOcclusionSpartialPass();
+    AmbientOcclusionTemporalPass();
     LightingPass();
     ScreenPass();
+
+    m_NumFrames++;
 }
 
 void Render::ShadowCsmPass() {
@@ -463,6 +594,187 @@ void Render::DepthPass() {
 
         glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
     }
+
+    m_DepthTexture2D->GenerateMipMaps();
+}
+
+void Render::VelocityPass() {
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    assert(m_VelocityFramebuffer);
+    assert(m_VelocityShaderProgram);
+    assert(m_VelocityTexture2D);
+
+    glScissor(0, 0, m_VelocityTexture2D->m_Width, m_VelocityTexture2D->m_Height);
+    glViewport(0, 0, m_VelocityTexture2D->m_Width, m_VelocityTexture2D->m_Height);
+
+    m_VelocityFramebuffer->Bind();
+
+    if (m_CameraBuffer) {
+        m_CameraBuffer->Bind(0);
+    }
+
+    assert(m_DepthTexture2D);
+    assert(m_LastDepthTexture2D);
+
+    m_DepthTexture2D->Bind(0, m_SamplerClamp);
+    m_LastDepthTexture2D->Bind(1, m_SamplerClamp);
+
+    m_VelocityShaderProgram->Use();
+
+    auto rd = std::random_device();
+    auto gen = std::mt19937(rd());
+    auto dist = std::uniform_real_distribution<>();
+
+    auto jitter0 = glm::vec2(dist(gen) * 1.f / g_Window->m_ScreenWidth, dist(gen) * 1.f / g_Window->m_ScreenHeight);
+    auto jitter1 = glm::vec2(dist(gen) * 1.f / g_Window->m_ScreenWidth, dist(gen) * 1.f / g_Window->m_ScreenHeight);
+
+    glUniform2fv(0, 1, reinterpret_cast<float *>(&jitter0));
+    glUniform2fv(1, 1, reinterpret_cast<float *>(&jitter1));
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void Render::DownsampleDepthVelocityPass() {
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    assert(m_DownsampleDepthVelocityFramebuffer);
+    assert(m_DownsampleDepthVelocityShaderProgram);
+    assert(m_HalfDepthTexture2D);
+    assert(m_HalfVelocityTexture2D);
+
+    glScissor(0, 0, m_HalfDepthTexture2D->m_Width, m_HalfDepthTexture2D->m_Height);
+    glViewport(0, 0, m_HalfDepthTexture2D->m_Width, m_HalfDepthTexture2D->m_Height);
+
+    m_DownsampleDepthVelocityFramebuffer->Bind();
+
+    assert(m_DepthTexture2D);
+    assert(m_VelocityTexture2D);
+
+    m_DepthTexture2D->Bind(0, m_SamplerClamp);
+    m_VelocityTexture2D->Bind(1, m_SamplerClamp);
+
+    m_DownsampleDepthVelocityShaderProgram->Use();
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    m_HalfDepthTexture2D->GenerateMipMaps();
+    m_HalfVelocityTexture2D->GenerateMipMaps();
+}
+
+void Render::AmbientOcclusionPass() {
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    assert(m_AmbientOcclusionFramebuffer);
+    assert(m_AmbientOcclusionShaderProgram);
+    assert(m_AmbientOcclusionTexture2D);
+
+    glScissor(0, 0, m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
+    glViewport(0, 0, m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
+
+    m_AmbientOcclusionFramebuffer->Bind();
+
+    if (m_CameraBuffer) {
+        m_CameraBuffer->Bind(0);
+    }
+
+    assert(m_DepthTexture2D);
+
+    m_DepthTexture2D->Bind(0, m_SamplerClamp);
+
+    m_AmbientOcclusionShaderProgram->Use();
+
+    auto screenSize = glm::vec2(m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
+    auto screenSizeInv = glm::vec2(1.f / m_AmbientOcclusionTexture2D->m_Width, 1.f / m_AmbientOcclusionTexture2D->m_Height);
+
+    const float rotations[] = { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
+
+    glUniform2fv(0, 1, reinterpret_cast<float *>(&screenSize));
+    glUniform2fv(1, 1, reinterpret_cast<float *>(&screenSizeInv));
+    glUniform1f(2, 4.f);
+    glUniform1f(3, rotations[m_NumFrames % 6] / 360.f * 2.f * 3.14159265358979323846f);
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void Render::AmbientOcclusionSpartialPass() {
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    assert(m_AmbientOcclusionSpartialFramebuffer);
+    assert(m_AmbientOcclusionSpartialShaderProgram);
+    assert(m_AmbientOcclusionSpartialTexture2D);
+
+    glScissor(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Width, m_AmbientOcclusionSpartialTexture2D->m_Height);
+    glViewport(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Width, m_AmbientOcclusionSpartialTexture2D->m_Height);
+
+    m_AmbientOcclusionSpartialFramebuffer->Bind();
+
+    if (m_CameraBuffer) {
+        m_CameraBuffer->Bind(0);
+    }
+
+    assert(m_AmbientOcclusionTexture2D);
+    assert(m_DepthTexture2D);
+
+    m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp);
+    m_HalfDepthTexture2D->Bind(1, m_SamplerClamp);
+
+    m_AmbientOcclusionSpartialShaderProgram->Use();
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void Render::AmbientOcclusionTemporalPass() {
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    assert(m_AmbientOcclusionTemporalFramebuffer);
+    assert(m_AmbientOcclusionTemporalShaderProgram);
+    assert(m_AmbientOcclusionTemporalTexture2D);
+
+    glScissor(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
+    glViewport(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
+
+    m_AmbientOcclusionTemporalFramebuffer->Bind();
+
+    if (m_CameraBuffer) {
+        m_CameraBuffer->Bind(0);
+    }
+
+    assert(m_AmbientOcclusionSpartialTexture2D);
+    assert(m_HalfDepthTexture2D);
+    assert(m_HalfVelocityTexture2D);
+    assert(m_LastAmbientOcclusionTemporalTexture2D);
+    assert(m_LastHalfDepthTexture2D);
+
+    m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp);
+    m_HalfDepthTexture2D->Bind(1, m_SamplerClamp);
+    m_HalfVelocityTexture2D->Bind(2, m_SamplerClamp);
+    m_LastAmbientOcclusionTemporalTexture2D->Bind(3, m_SamplerClamp);
+    m_LastHalfDepthTexture2D->Bind(4, m_SamplerClamp);
+
+    m_AmbientOcclusionTemporalShaderProgram->Use();
+
+    auto screenSize = glm::vec2(m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
+
+    glUniform1f(0, 0.7f);
+    glUniform2fv(1, 1, reinterpret_cast<float *>(&screenSize));
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 void Render::LightingPass() {
@@ -500,29 +812,34 @@ void Render::LightingPass() {
         m_VertexBuffer->Bind(4);
     }
 
+    assert(m_AmbientOcclusionTemporalTexture2D);
+
+    m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp);
+
     if (m_DiffuseTexture2DArray) {
-        m_DiffuseTexture2DArray->Bind(0, *m_SamplerWrap);
+        m_DiffuseTexture2DArray->Bind(1, m_SamplerWrap);
     }
     if (m_MetalnessTexture2DArray) {
-        m_MetalnessTexture2DArray->Bind(1, *m_SamplerWrap);
+        m_MetalnessTexture2DArray->Bind(2, m_SamplerWrap);
     }
     if (m_NormalTexture2DArray) {
-        m_NormalTexture2DArray->Bind(2, *m_SamplerWrap);
+        m_NormalTexture2DArray->Bind(3, m_SamplerWrap);
     }
     if (m_RoughnessTexture2DArray) {
-        m_RoughnessTexture2DArray->Bind(3, *m_SamplerWrap);
+        m_RoughnessTexture2DArray->Bind(4, m_SamplerWrap);
     }
-    if (m_ShadowCsmColorTexture2DArray) {
-        m_ShadowCsmColorTexture2DArray->Bind(4, *m_SamplerShadowBorder);
-    }
-    if (m_ShadowCsmDepthTexture2DArray) {
-        m_ShadowCsmDepthTexture2DArray->Bind(5, *m_SamplerShadowBorder);
-    }
+
+    assert(m_ShadowCsmColorTexture2DArray);
+    assert(m_ShadowCsmDepthTexture2DArray);
+
+    m_ShadowCsmColorTexture2DArray->Bind(5, m_SamplerShadowBorder);
+    m_ShadowCsmDepthTexture2DArray->Bind(6, m_SamplerShadowBorder);
 
     m_LightingShaderProgram->Use();
 
-    glUniform1i(0, m_EnableReverseZ);
-    glUniform1f(1, 1.f / SHADOW_SIZE);
+    glUniform1i(0, m_EnableAmbientOcclusion);
+    glUniform1i(1, m_EnableReverseZ);
+    glUniform1f(2, 1.f / SHADOW_SIZE);
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();
@@ -546,7 +863,7 @@ void Render::ScreenPass() {
 
     m_ScreenFramebuffer->Bind();
 
-    m_LightingTexture2D->Bind(0);
+    m_LightingTexture2D->Bind(0, m_SamplerClamp);
 
     m_ScreenShaderProgram->Use();
 

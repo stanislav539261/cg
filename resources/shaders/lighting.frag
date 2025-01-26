@@ -20,6 +20,7 @@ struct Material {
 
 layout(std430, binding = 0) readonly buffer CameraBuffer {
     mat4  g_Projection;
+    mat4  g_ProjectionInversed;
     mat4  g_View;
     vec3  g_CameraPos;
     float m_Padding0;
@@ -37,15 +38,17 @@ layout(std430, binding = 3) readonly buffer MaterialBuffer {
     Material g_Materials[];
 };
 
-layout(binding = 0) uniform sampler2DArray g_DiffuseTextures;
-layout(binding = 1) uniform sampler2DArray g_MetalnessTextures;
-layout(binding = 2) uniform sampler2DArray g_NormalTextures;
-layout(binding = 3) uniform sampler2DArray g_RoughnessTextures;
-layout(binding = 4) uniform sampler2DArray g_ShadowCsmColorTextures;
-layout(binding = 5) uniform sampler2DArray g_ShadowCsmDepthTextures;
+layout(binding = 0) uniform sampler2D g_AmbientOcclusionTexture;
+layout(binding = 1) uniform sampler2DArray g_DiffuseTextures;
+layout(binding = 2) uniform sampler2DArray g_MetalnessTextures;
+layout(binding = 3) uniform sampler2DArray g_NormalTextures;
+layout(binding = 4) uniform sampler2DArray g_RoughnessTextures;
+layout(binding = 5) uniform sampler2DArray g_ShadowCsmColorTextures;
+layout(binding = 6) uniform sampler2DArray g_ShadowCsmDepthTextures;
 
-layout(location = 0) uniform bool g_EnableReverseZ;
-layout(location = 1) uniform float g_ShadowSizeInv;
+layout(location = 0) uniform bool g_EnableAmbientOcclusion;
+layout(location = 1) uniform bool g_EnableReverseZ;
+layout(location = 2) uniform float g_ShadowSizeInv;
 
 in VS_OUT {
     layout(location = 0) smooth vec3 m_FragPos;
@@ -211,6 +214,15 @@ mat3 ComputeCotangentFrame(vec3 normal, vec3 p, vec2 uv) {
     return mat3(T * invmax, B * invmax, normal);
 }
 
+vec3 ComputeGtaoMultiBounce(float ao, vec3 albedo) {
+	vec3 x = vec3(ao);
+	vec3 a = 2.0404 * albedo - vec3(0.3324);
+	vec3 b = -4.7951 * albedo + vec3(0.6417);
+	vec3 c = 2.7552 * albedo + vec3(0.6903);
+
+	return max(x, ((x * a + b) * x + c) * x);
+}
+
 void main() {
     uint material = VS_Output.m_Material;
     vec2 texcoord = VS_Output.m_Texcoord;
@@ -233,8 +245,14 @@ void main() {
     vec3 F0 = vec3(0.04f); 
     F0 = mix(F0, diffuseColor.rgb, metalnessColor.r);   
 
+    vec2 NDCSpaceFragPos = vec2(gl_FragCoord.x * 1.f / 1600.f, gl_FragCoord.y * 1.f / 900.f) / gl_FragCoord.w;
+    vec2 textureLookupPos = NDCSpaceFragPos * 0.5f + 0.5f;
+
     vec3 ambientLighting = g_LightEnvironment.m_AmbientColor * diffuseColor.rgb;
     vec3 pbrLighting = g_LightEnvironment.m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, diffuseColor.rgb, metalnessColor.r, roughnessColor.r);  
+    vec3 sumLighting = ambientLighting + pbrLighting * ComputeShadowCsm(fragPos, normal, lightDir);
+    
+    vec3 aoFactor = g_EnableAmbientOcclusion ? ComputeGtaoMultiBounce(texelFetch(g_AmbientOcclusionTexture, ivec2(gl_FragCoord.xy), 0).r, sumLighting) : vec3(1.f);
 
-    outColor = vec4(ambientLighting + pbrLighting * ComputeShadowCsm(fragPos, normal, lightDir), 1.f);
+    outColor = vec4(sumLighting * aoFactor, 1.f);
 }

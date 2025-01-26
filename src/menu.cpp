@@ -14,6 +14,7 @@ Menu::~Menu() {
 
 void Menu::Show() {
     ImGui::Begin("Menu");
+    ImGui::Checkbox("Enable Ambient Occlusion", &g_Render->m_EnableAmbientOcclusion);
     ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);
     ImGui::SeparatorText("LightEnvironment");
     ImGui::SliderFloat3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor), 0.f, 1.f);

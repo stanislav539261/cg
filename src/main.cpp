@@ -6,8 +6,8 @@
 #include "camera.hpp"
 #include "control.hpp"
 #include "light.hpp"
+#include "model.hpp"
 #include "render.hpp"
-#include "scene.hpp"
 #include "state.hpp"
 #include "ui.hpp"
 #include "window.hpp"
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     auto width = 1280;
 
     for (; i < argc; i++) {
-        if (std::strcmp(argv[i], "--scene") == 0) {
+        if (std::strcmp(argv[i], "--model") == 0) {
             filename = argv[++i];
         } else if (std::strcmp(argv[i], "--height") == 0) {
             height = std::atoi(argv[++i]);
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     auto events = std::vector<SDL_Event>();
     auto quit = false;
 
-    g_Render->LoadScene(Scene(g_ResourcePath / std::filesystem::path(filename)));
+    g_Render->LoadModel(Model(g_ResourcePath / std::filesystem::path(filename)));
 
     while (!quit) {
         g_PreviousTime = g_CurrentTime;

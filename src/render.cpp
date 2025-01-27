@@ -324,7 +324,7 @@ Render::~Render() {
     SDL_GL_DeleteContext(m_Context);
 }
 
-void Render::LoadScene(const Scene &scene) {
+void Render::LoadModel(const Model &model) {
     if (!m_Context) {
         return;
     }
@@ -334,7 +334,7 @@ void Render::LoadScene(const Scene &scene) {
     auto normalImages = std::vector<std::shared_ptr<Image>>();
     auto roughnessImages = std::vector<std::shared_ptr<Image>>();
 
-    for (const auto &material : scene.m_Materials) {
+    for (const auto &material : model.m_Materials) {
         if (material.m_DiffuseImage) {
             diffuseImages.push_back(material.m_DiffuseImage);
         }
@@ -370,7 +370,7 @@ void Render::LoadScene(const Scene &scene) {
     }
 
     // Load buffers
-    auto materialBuffer = std::shared_ptr<Buffer<GpuMaterial>>(new Buffer<GpuMaterial>(scene.m_Materials.size()));
+    auto materialBuffer = std::shared_ptr<Buffer<GpuMaterial>>(new Buffer<GpuMaterial>(model.m_Materials.size()));
 
     auto materials = std::vector<GpuMaterial>();
     auto numDiffuseImages = 0u;
@@ -378,7 +378,7 @@ void Render::LoadScene(const Scene &scene) {
     auto numNormalImages = 0u;
     auto numRoughnessImages = 0u;
 
-    for (const auto &material : scene.m_Materials) {
+    for (const auto &material : model.m_Materials) {
         auto gpuMaterial = GpuMaterial {
             .m_DiffuseMap = material.m_DiffuseImage ? numDiffuseImages : -1,
             .m_MetalnessMap = material.m_MetalnessImage ? numDiffuseImages : -1,
@@ -396,10 +396,10 @@ void Render::LoadScene(const Scene &scene) {
 
     materialBuffer->SetData(materials, 0);
 
-    auto drawIndirectBuffer = std::shared_ptr<DrawIndirectBuffer>(new DrawIndirectBuffer(scene.m_Meshes.size()));
-    auto indexBuffer = std::shared_ptr<Buffer<GpuIndex>>(new Buffer<GpuIndex>(scene.NumIndices()));
+    auto drawIndirectBuffer = std::shared_ptr<DrawIndirectBuffer>(new DrawIndirectBuffer(model.m_Meshes.size()));
+    auto indexBuffer = std::shared_ptr<Buffer<GpuIndex>>(new Buffer<GpuIndex>(model.NumIndices()));
     auto lightEnvironmentBuffer = std::shared_ptr<Buffer<GpuLightEnvironment>>(new Buffer<GpuLightEnvironment>());
-    auto vertexBuffer = std::shared_ptr<Buffer<GpuVertex>>(new Buffer<GpuVertex>(scene.NumVertices()));
+    auto vertexBuffer = std::shared_ptr<Buffer<GpuVertex>>(new Buffer<GpuVertex>(model.NumVertices()));
 
     auto meshes = std::vector<std::tuple<GLuint, GLuint>>();
     auto indexOffset = 0u;
@@ -407,7 +407,7 @@ void Render::LoadScene(const Scene &scene) {
 
     meshes.reserve(m_Meshes.size());
 
-    for (const auto &mesh : scene.m_Meshes) {
+    for (const auto &mesh : model.m_Meshes) {
         auto drawIndirectCommand = DrawIndirectCommand {
             .m_NumVertices = static_cast<GLuint>(mesh.m_Indices.size()),
             .m_NumInstances = 1,
@@ -503,7 +503,7 @@ void Render::Update() {
     std::swap(m_HalfDepthTexture2D, m_LastHalfDepthTexture2D);
     std::swap(m_LightingFramebuffer, m_LastLightingFramebuffer);
 
-    // Draw scene
+    // Draw model
     ShadowCsmPass();
     DepthPass();
     DownsampleDepthVelocityPass();

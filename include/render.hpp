@@ -9,10 +9,9 @@
 
 #include "buffer.hpp"
 #include "framebuffer.hpp"
+#include "model.hpp"
 #include "shader.hpp"
 #include "texture.hpp"
-
-#include "scene.hpp"
 
 struct GpuCamera {
     glm::mat4   m_Projection;
@@ -53,7 +52,7 @@ public:
     Render();
     ~Render();
 
-    void                                            LoadScene(const Scene &);
+    void                                            LoadModel(const Model &);
     void                                            Update();
 
     SDL_GLContext                                   m_Context;
@@ -108,8 +107,8 @@ private:
     std::shared_ptr<Texture2DArray>                 m_NormalTexture2DArray;
     unsigned int                                    m_NumFrames;
     std::shared_ptr<Texture2DArray>                 m_RoughnessTexture2DArray;
+    std::shared_ptr<Sampler>                        m_SamplerBorderWhite;
     std::shared_ptr<Sampler>                        m_SamplerClamp;
-    std::shared_ptr<Sampler>                        m_SamplerShadowBorder;
     std::shared_ptr<Sampler>                        m_SamplerWrap;
     std::shared_ptr<DefaultFramebuffer>             m_ScreenFramebuffer;
     std::shared_ptr<ShaderProgram>                  m_ScreenShaderProgram;

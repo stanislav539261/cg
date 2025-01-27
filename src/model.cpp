@@ -4,10 +4,10 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 
-#include "scene.hpp"
+#include "model.hpp"
 #include "state.hpp"
 
-Scene::Scene(const std::filesystem::path &filename) {
+Model::Model(const std::filesystem::path &filename) {
     auto aiImport = Assimp::Importer();
     auto aiScene = aiImport.ReadFile(filename.c_str(), aiProcess_FlipUVs | aiProcess_Triangulate);
 
@@ -97,11 +97,11 @@ Scene::Scene(const std::filesystem::path &filename) {
     aiImport.FreeScene();
 }
 
-Scene::~Scene() {
+Model::~Model() {
 
 }
 
-size_t Scene::NumIndices() const {
+size_t Model::NumIndices() const {
     auto accum = 0u;
 
     for (const auto &mesh : m_Meshes) {
@@ -111,7 +111,7 @@ size_t Scene::NumIndices() const {
     return accum;
 }
 
-size_t Scene::NumVertices() const {
+size_t Model::NumVertices() const {
     auto accum = 0u;
 
     for (const auto &mesh : m_Meshes) {

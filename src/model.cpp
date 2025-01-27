@@ -29,25 +29,25 @@ Model::Model(const std::filesystem::path &filename) {
             for (auto j = 0u; j < std::min(aiMaterial->GetTextureCount(aiTextureType_DIFFUSE), 1u); j++) {
                 aiString aiFilename;
                 aiMaterial->GetTexture(aiTextureType_DIFFUSE, j, &aiFilename);
-                diffuseImage = std::shared_ptr<Image>(new Image(g_ResourcePath / aiFilename.C_Str()));
+                diffuseImage = std::make_shared<Image>(g_ResourcePath / aiFilename.C_Str());
             }
 
             for (auto j = 0u; j < std::min(aiMaterial->GetTextureCount(aiTextureType_AMBIENT), 1u); j++) {
                 aiString aiFilename;
                 aiMaterial->GetTexture(aiTextureType_AMBIENT, j, &aiFilename);
-                metalnessImage = std::shared_ptr<Image>(new Image(g_ResourcePath / aiFilename.C_Str()));
+                metalnessImage = std::make_shared<Image>(g_ResourcePath / aiFilename.C_Str());
             }
 
             for (auto j = 0u; j < std::min(aiMaterial->GetTextureCount(aiTextureType_HEIGHT), 1u); j++) {
                 aiString aiFilename;
                 aiMaterial->GetTexture(aiTextureType_HEIGHT, j, &aiFilename);
-                normalImage = std::shared_ptr<Image>(new Image(g_ResourcePath / aiFilename.C_Str()));
+                normalImage = std::make_shared<Image>(g_ResourcePath / aiFilename.C_Str());
             }
 
             for (auto j = 0u; j < std::min(aiMaterial->GetTextureCount(aiTextureType_SHININESS), 1u); j++) {
                 aiString aiFilename;
                 aiMaterial->GetTexture(aiTextureType_SHININESS, j, &aiFilename);
-                roughnessImage = std::shared_ptr<Image>(new Image(g_ResourcePath / aiFilename.C_Str()));
+                roughnessImage = std::make_shared<Image>(g_ResourcePath / aiFilename.C_Str());
             }
 
             materials.push_back(Material {

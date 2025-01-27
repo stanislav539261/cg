@@ -134,10 +134,10 @@ Render::Render() {
             m_NumFrames = 0;
 
             // Create buffers
-            auto cameraBuffer = std::shared_ptr<Buffer<GpuCamera>>(new Buffer<GpuCamera>());
+            auto cameraBuffer = std::make_shared<Buffer<GpuCamera>>();
 
             // Create samplers
-            auto samplerBorderWhite = std::shared_ptr<Sampler>(new Sampler());
+            auto samplerBorderWhite = std::make_shared<Sampler>();
             samplerBorderWhite->SetParameter(GL_TEXTURE_BORDER_COLOR, glm::vec4(1.f));
             samplerBorderWhite->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
             samplerBorderWhite->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
@@ -147,7 +147,7 @@ Render::Render() {
             samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
             samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
-            auto samplerClamp = std::shared_ptr<Sampler>(new Sampler());
+            auto samplerClamp = std::make_shared<Sampler>();
             samplerClamp->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
             samplerClamp->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
             samplerClamp->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
@@ -156,7 +156,7 @@ Render::Render() {
             samplerClamp->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
             samplerClamp->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
 
-            auto samplerWrap = std::shared_ptr<Sampler>(new Sampler());
+            auto samplerWrap = std::make_shared<Sampler>();
             samplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
             samplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
             samplerWrap->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
@@ -178,98 +178,98 @@ Render::Render() {
                 minWidth /= 2;
             }
 
-            auto ambientOcclusionTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height , 1, GL_R16F));
-            auto ambientOcclusionSpartialTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_R16F));
-            auto ambientOcclusionTemporalTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_R16F));
-            auto depthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, mipLevel, GL_DEPTH_COMPONENT32F));
-            auto halfDepthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width / 2, height / 2, mipLevel - 1, GL_R32F));
-            auto halfVelocityTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width / 2, height / 2, mipLevel - 1, GL_RG16F));
-            auto lastAmbientOcclusionTemporalTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_R16F));
-            auto lastDepthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, mipLevel, GL_DEPTH_COMPONENT32F));
-            auto lastHalfDepthTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width / 2, height / 2, mipLevel - 1, GL_R32F));
-            auto lightingTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, 1, GL_RGB16F));
-            auto shadowCsmColorTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F));
-            auto shadowCsmDepthTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F));
-            auto velocityTexture2D = std::shared_ptr<Texture2D>(new Texture2D(width, height, mipLevel, GL_RG16F));
+            auto ambientOcclusionTexture2D = std::make_shared<Texture2D>(width, height , 1, GL_R16F);
+            auto ambientOcclusionSpartialTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
+            auto ambientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
+            auto depthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
+            auto halfDepthTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, mipLevel - 1, GL_R32F);
+            auto halfVelocityTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, mipLevel - 1, GL_RG16F);
+            auto lastAmbientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
+            auto lastDepthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
+            auto lastHalfDepthTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, mipLevel - 1, GL_R32F);
+            auto lightingTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_RGB16F);
+            auto shadowCsmColorTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F);
+            auto shadowCsmDepthTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F);
+            auto velocityTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_RG16F);
 
             // Create framebuffers
-            auto ambientOcclusionFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto ambientOcclusionFramebuffer = std::make_shared<Framebuffer>();
             ambientOcclusionFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionTexture2D);
 
-            auto ambientOcclusionSpartialFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto ambientOcclusionSpartialFramebuffer = std::make_shared<Framebuffer>();
             ambientOcclusionSpartialFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionSpartialTexture2D);
 
-            auto ambientOcclusionTemporalFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto ambientOcclusionTemporalFramebuffer = std::make_shared<Framebuffer>();
             ambientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionTemporalTexture2D);
 
-            auto depthFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto depthFramebuffer = std::make_shared<Framebuffer>();
             depthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
 
-            auto downsampleDepthVelocityFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto downsampleDepthVelocityFramebuffer = std::make_shared<Framebuffer>();
             downsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, halfDepthTexture2D);
             downsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT1, halfVelocityTexture2D);
 
-            auto lastAmbientOcclusionTemporalFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto lastAmbientOcclusionTemporalFramebuffer = std::make_shared<Framebuffer>();
             lastAmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastAmbientOcclusionTemporalTexture2D);
 
-            auto lastDepthFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto lastDepthFramebuffer = std::make_shared<Framebuffer>();
             lastDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
 
-            auto lastDownsampleDepthVelocityFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto lastDownsampleDepthVelocityFramebuffer = std::make_shared<Framebuffer>();
             lastDownsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastHalfDepthTexture2D);
             lastDownsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT1, halfVelocityTexture2D);
 
-            auto lastLightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto lastLightingFramebuffer = std::make_shared<Framebuffer>();
             lastLightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
             lastLightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
 
-            auto lightingFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto lightingFramebuffer = std::make_shared<Framebuffer>();
             lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
             lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
 
-            auto screenFramebuffer = std::shared_ptr<DefaultFramebuffer>(new DefaultFramebuffer());
+            auto screenFramebuffer = std::make_shared<DefaultFramebuffer>();
 
-            auto shadowCsmFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto shadowCsmFramebuffer = std::make_shared<Framebuffer>();
             shadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, shadowCsmColorTexture2DArray);
             shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
 
-            auto velocityFramebuffer = std::shared_ptr<Framebuffer>(new Framebuffer());
+            auto velocityFramebuffer = std::make_shared<Framebuffer>();
             velocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, velocityTexture2D);
 
             // Create shader programs
-            auto ambientOcclusionShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto ambientOcclusionShaderProgram = std::make_shared<ShaderProgram>();
             assert(ambientOcclusionShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao.vert"));
             assert(ambientOcclusionShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao.frag"));
             
-            auto ambientOcclusionSpartialShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto ambientOcclusionSpartialShaderProgram = std::make_shared<ShaderProgram>();
             assert(ambientOcclusionSpartialShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_spartial.vert"));
             assert(ambientOcclusionSpartialShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_spartial.frag"));
 
-            auto ambientOcclusionTemporalShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto ambientOcclusionTemporalShaderProgram = std::make_shared<ShaderProgram>();
             assert(ambientOcclusionTemporalShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_temporal.vert"));
             assert(ambientOcclusionTemporalShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_temporal.frag"));
 
-            auto depthShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto depthShaderProgram = std::make_shared<ShaderProgram>();
             assert(depthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/depth.vert"));
 
-            auto downsampleDepthVelocityShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto downsampleDepthVelocityShaderProgram = std::make_shared<ShaderProgram>();
             assert(downsampleDepthVelocityShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/downsample_depth_velocity.vert"));
             assert(downsampleDepthVelocityShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/downsample_depth_velocity.frag"));
 
-            auto lightingShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto lightingShaderProgram = std::make_shared<ShaderProgram>();
             assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
             assert(lightingShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/lighting.frag"));
 
-            auto screenShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto screenShaderProgram = std::make_shared<ShaderProgram>();
             assert(screenShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/screen.vert"));
             assert(screenShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/screen.frag"));
 
-            auto shadowCsmShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto shadowCsmShaderProgram = std::make_shared<ShaderProgram>();
             assert(shadowCsmShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_csm.vert"));
             assert(shadowCsmShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_csm.geom"));
             assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
 
-            auto velocityShaderProgram = std::shared_ptr<ShaderProgram>(new ShaderProgram());
+            auto velocityShaderProgram = std::make_shared<ShaderProgram>();
             assert(velocityShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/velocity.vert"));
             assert(velocityShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/velocity.frag"));
 
@@ -357,20 +357,20 @@ void Render::LoadModel(const Model &model) {
     auto roughnessTexture2DArray = std::shared_ptr<Texture2DArray>();
 
     if (diffuseImages.size() > 0) {
-        diffuseTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(diffuseImages));
+        diffuseTexture2DArray = std::make_shared<Texture2DArray>(diffuseImages);
     }
     if (metalnessImages.size() > 0) {
-        metalnessTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(metalnessImages));
+        metalnessTexture2DArray = std::make_shared<Texture2DArray>(metalnessImages);
     }
     if (normalImages.size() > 0) {
-        normalTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(normalImages));
+        normalTexture2DArray = std::make_shared<Texture2DArray>(normalImages);
     }
     if (roughnessImages.size() > 0) {
-        roughnessTexture2DArray = std::shared_ptr<Texture2DArray>(new Texture2DArray(roughnessImages));
+        roughnessTexture2DArray = std::make_shared<Texture2DArray>(roughnessImages);
     }
 
     // Load buffers
-    auto materialBuffer = std::shared_ptr<Buffer<GpuMaterial>>(new Buffer<GpuMaterial>(model.m_Materials.size()));
+    auto materialBuffer = std::make_shared<Buffer<GpuMaterial>>(model.m_Materials.size());
 
     auto materials = std::vector<GpuMaterial>();
     auto numDiffuseImages = 0u;
@@ -396,10 +396,10 @@ void Render::LoadModel(const Model &model) {
 
     materialBuffer->SetData(materials, 0);
 
-    auto drawIndirectBuffer = std::shared_ptr<DrawIndirectBuffer>(new DrawIndirectBuffer(model.m_Meshes.size()));
-    auto indexBuffer = std::shared_ptr<Buffer<GpuIndex>>(new Buffer<GpuIndex>(model.NumIndices()));
-    auto lightEnvironmentBuffer = std::shared_ptr<Buffer<GpuLightEnvironment>>(new Buffer<GpuLightEnvironment>());
-    auto vertexBuffer = std::shared_ptr<Buffer<GpuVertex>>(new Buffer<GpuVertex>(model.NumVertices()));
+    auto drawIndirectBuffer = std::make_shared<DrawIndirectBuffer>(model.m_Meshes.size());
+    auto indexBuffer = std::make_shared<Buffer<GpuIndex>>(model.NumIndices());
+    auto lightEnvironmentBuffer = std::make_shared<Buffer<GpuLightEnvironment>>();
+    auto vertexBuffer = std::make_shared<Buffer<GpuVertex>>(model.NumVertices());
 
     auto meshes = std::vector<std::tuple<GLuint, GLuint>>();
     auto indexOffset = 0u;

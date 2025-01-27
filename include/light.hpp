@@ -1,3 +1,6 @@
+#ifndef LIGHT_HPP
+#define LIGHT_HPP
+
 #include <array>
 
 #include <glm/glm.hpp>
@@ -19,3 +22,5 @@ public:
 };
 
 extern std::shared_ptr<LightEnvironment> g_LightEnvironment;
+
+#endif /* LIGHT_HPP */

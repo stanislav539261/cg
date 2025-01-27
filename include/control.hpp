@@ -1,3 +1,6 @@
+#ifndef CONTROL_HPP
+#define CONTROL_HPP
+
 #include <memory>
 #include <set>
 #include <vector>
@@ -15,4 +18,6 @@ public:
     std::set<unsigned int>      m_KeysPressedOnce;
 };
 
-extern std::shared_ptr<Control> g_Control; 
+extern std::shared_ptr<Control> g_Control;
+
+#endif /* CONTROL_HPP */

@@ -1,7 +1,6 @@
 #ifndef UI_HPP
 #define UI_HPP
 
-#include "menu.hpp"
 #include <memory>
 #include <vector>
 
@@ -14,7 +13,6 @@ public:
 
     void                    Update(const std::vector<SDL_Event> &);
 
-    std::shared_ptr<Menu>   m_Menu;
     bool                    m_ShowMenu;
 };
 

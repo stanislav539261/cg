@@ -2,6 +2,7 @@
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl2.h"
 
+#include "light.hpp"
 #include "render.hpp"
 #include "ui.hpp"
 #include "window.hpp"
@@ -24,7 +25,6 @@ Ui::Ui() {
         ImGui_ImplOpenGL3_Init("#version 460");
     }
 
-    m_Menu = std::shared_ptr<Menu>(new Menu());
     m_ShowMenu = false;
 }
 
@@ -48,7 +48,19 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
 
         if (m_ShowMenu) {
             io.MouseDrawCursor = true;
-            m_Menu->Show();
+
+            ImGui::Begin("Menu");
+
+            ImGui::Checkbox("Enable Ambient Occlusion", &g_Render->m_EnableAmbientOcclusion);
+            ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);
+
+            ImGui::SeparatorText("LightEnvironment");
+            ImGui::SliderFloat3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor), 0.f, 1.f);
+            ImGui::SliderFloat3("Base color", reinterpret_cast<float *>(&g_LightEnvironment->m_BaseColor), 0.f, 1.f);
+            ImGui::SliderFloat("Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
+            ImGui::SliderFloat("Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
+
+            ImGui::End();
         } else {
             io.MouseDrawCursor = false;
         }

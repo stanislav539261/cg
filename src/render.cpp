@@ -172,7 +172,7 @@ Render::Render() {
             auto minWidth = width;
             auto mipLevel = 0u;
 
-            for (auto i = 0u; minHeight != 0 && minWidth != 0; i++) {
+            for (auto i = 0u; minHeight > 0 && minWidth > 0; i++) {
                 mipLevel++;
                 minHeight /= 2;
                 minWidth /= 2;
@@ -182,15 +182,20 @@ Render::Render() {
             auto ambientOcclusionSpartialTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
             auto ambientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
             auto depthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
-            auto halfDepthTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, mipLevel - 1, GL_R32F);
-            auto halfVelocityTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, mipLevel - 1, GL_RG16F);
             auto lastAmbientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
             auto lastDepthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
-            auto lastHalfDepthTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, mipLevel - 1, GL_R32F);
-            auto lightingTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_RGB16F);
+            auto lightingTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_RGBA16F);
             auto shadowCsmColorTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F);
             auto shadowCsmDepthTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F);
-            auto velocityTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_RG16F);
+            auto velocityTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, 1, GL_RG16F);
+
+            auto depthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
+            auto lastDepthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
+
+            for (auto i = 0u; i < mipLevel; i++) {
+                depthTextureView2Ds.push_back(std::make_shared<TextureView2D>(depthTexture2D, i, mipLevel - i));
+                lastDepthTextureView2Ds.push_back(std::make_shared<TextureView2D>(lastDepthTexture2D, i, mipLevel - i));
+            }
 
             // Create framebuffers
             auto ambientOcclusionFramebuffer = std::make_shared<Framebuffer>();
@@ -205,19 +210,14 @@ Render::Render() {
             auto depthFramebuffer = std::make_shared<Framebuffer>();
             depthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
 
-            auto downsampleDepthVelocityFramebuffer = std::make_shared<Framebuffer>();
-            downsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, halfDepthTexture2D);
-            downsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT1, halfVelocityTexture2D);
+            auto downsampleDepthFramebuffer = std::make_shared<Framebuffer>();
+            downsampleDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTextureView2Ds[0]);
 
             auto lastAmbientOcclusionTemporalFramebuffer = std::make_shared<Framebuffer>();
             lastAmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastAmbientOcclusionTemporalTexture2D);
 
             auto lastDepthFramebuffer = std::make_shared<Framebuffer>();
             lastDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
-
-            auto lastDownsampleDepthVelocityFramebuffer = std::make_shared<Framebuffer>();
-            lastDownsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastHalfDepthTexture2D);
-            lastDownsampleDepthVelocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT1, halfVelocityTexture2D);
 
             auto lastLightingFramebuffer = std::make_shared<Framebuffer>();
             lastLightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
@@ -252,9 +252,9 @@ Render::Render() {
             auto depthShaderProgram = std::make_shared<ShaderProgram>();
             assert(depthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/depth.vert"));
 
-            auto downsampleDepthVelocityShaderProgram = std::make_shared<ShaderProgram>();
-            assert(downsampleDepthVelocityShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/downsample_depth_velocity.vert"));
-            assert(downsampleDepthVelocityShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/downsample_depth_velocity.frag"));
+            auto downsampleDepthShaderProgram = std::make_shared<ShaderProgram>();
+            assert(downsampleDepthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/downsample_depth.vert"));
+            assert(downsampleDepthShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/downsample_depth.frag"));
 
             auto lightingShaderProgram = std::make_shared<ShaderProgram>();
             assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
@@ -286,16 +286,14 @@ Render::Render() {
             m_DepthFramebuffer = depthFramebuffer;
             m_DepthShaderProgram = depthShaderProgram;
             m_DepthTexture2D = depthTexture2D;
-            m_DownsampleDepthVelocityFramebuffer = downsampleDepthVelocityFramebuffer;
-            m_DownsampleDepthVelocityShaderProgram = downsampleDepthVelocityShaderProgram;
-            m_HalfDepthTexture2D = halfDepthTexture2D;
-            m_HalfVelocityTexture2D = halfVelocityTexture2D;
+            m_DepthTextureView2Ds = depthTextureView2Ds;
+            m_DownsampleDepthFramebuffer = downsampleDepthFramebuffer;
+            m_DownsampleDepthShaderProgram = downsampleDepthShaderProgram;
             m_LastAmbientOcclusionTemporalFramebuffer = lastAmbientOcclusionTemporalFramebuffer;
             m_LastAmbientOcclusionTemporalTexture2D = lastAmbientOcclusionTemporalTexture2D;
             m_LastDepthFramebuffer = lastDepthFramebuffer;
             m_LastDepthTexture2D = lastDepthTexture2D;
-            m_LastDownsampleDepthVelocityFramebuffer = lastDownsampleDepthVelocityFramebuffer;
-            m_LastHalfDepthTexture2D = lastHalfDepthTexture2D;
+            m_LastDepthTextureView2Ds = lastDepthTextureView2Ds;
             m_LastLightingFramebuffer = lastLightingFramebuffer;
             m_LightingFramebuffer = lightingFramebuffer;
             m_LightingShaderProgram = lightingShaderProgram;
@@ -499,14 +497,14 @@ void Render::Update() {
     std::swap(m_AmbientOcclusionTemporalTexture2D, m_LastAmbientOcclusionTemporalTexture2D);
     std::swap(m_DepthFramebuffer, m_LastDepthFramebuffer);
     std::swap(m_DepthTexture2D, m_LastDepthTexture2D);
-    std::swap(m_DownsampleDepthVelocityFramebuffer, m_LastDownsampleDepthVelocityFramebuffer);
-    std::swap(m_HalfDepthTexture2D, m_LastHalfDepthTexture2D);
+    std::swap(m_DepthTextureView2Ds, m_LastDepthTextureView2Ds);
     std::swap(m_LightingFramebuffer, m_LastLightingFramebuffer);
 
     // Draw model
     ShadowCsmPass();
     DepthPass();
-    DownsampleDepthVelocityPass();
+    DownsampleDepthPass();
+    VelocityPass();
     AmbientOcclusionPass();
     AmbientOcclusionSpartialPass();
     AmbientOcclusionTemporalPass();
@@ -591,8 +589,42 @@ void Render::DepthPass() {
 
         glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
     }
+}
 
-    m_DepthTexture2D->GenerateMipMaps();
+void Render::DownsampleDepthPass() {
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(true);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glFrontFace(GL_CCW);
+
+    assert(m_DepthTexture2D);
+    assert(m_DownsampleDepthFramebuffer);
+    assert(m_DownsampleDepthShaderProgram);
+
+    m_DownsampleDepthFramebuffer->Bind();
+    m_DownsampleDepthShaderProgram->Use();
+
+    glUniform1i(0, m_EnableReverseZ);
+
+    auto height = m_DepthTexture2D->m_Height;
+    auto width = m_DepthTexture2D->m_Width;
+
+    for (auto i = 0u; i < m_DepthTexture2D->m_MipLevel - 1; i++) {
+        width /= 2;
+        height /= 2;
+
+        glScissor(0, 0, width, height);
+        glViewport(0, 0, width, height);
+
+        m_DownsampleDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_DepthTextureView2Ds.at(i + 1));
+
+        m_DepthTextureView2Ds.at(i + 0)->Bind(0, m_SamplerClamp);
+
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
 }
 
 void Render::VelocityPass() {
@@ -614,11 +646,8 @@ void Render::VelocityPass() {
         m_CameraBuffer->Bind(0);
     }
 
-    assert(m_DepthTexture2D);
-    assert(m_LastDepthTexture2D);
-
-    m_DepthTexture2D->Bind(0, m_SamplerClamp);
-    m_LastDepthTexture2D->Bind(1, m_SamplerClamp);
+    m_DepthTextureView2Ds.at(1)->Bind(0, m_SamplerClamp);
+    m_LastDepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
 
     m_VelocityShaderProgram->Use();
 
@@ -626,43 +655,13 @@ void Render::VelocityPass() {
     auto gen = std::mt19937(rd());
     auto dist = std::uniform_real_distribution<>();
 
-    auto jitter0 = glm::vec2(dist(gen) * 1.f / g_Window->m_ScreenWidth, dist(gen) * 1.f / g_Window->m_ScreenHeight);
-    auto jitter1 = glm::vec2(dist(gen) * 1.f / g_Window->m_ScreenWidth, dist(gen) * 1.f / g_Window->m_ScreenHeight);
+    auto jitter0 = glm::vec2(dist(gen) * 1.f / m_VelocityTexture2D->m_Width, dist(gen) * 1.f / m_VelocityTexture2D->m_Height);
+    auto jitter1 = glm::vec2(dist(gen) * 1.f / m_VelocityTexture2D->m_Width, dist(gen) * 1.f / m_VelocityTexture2D->m_Height);
 
     glUniform2fv(0, 1, reinterpret_cast<float *>(&jitter0));
     glUniform2fv(1, 1, reinterpret_cast<float *>(&jitter1));
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-}
-
-void Render::DownsampleDepthVelocityPass() {
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-    assert(m_DownsampleDepthVelocityFramebuffer);
-    assert(m_DownsampleDepthVelocityShaderProgram);
-    assert(m_HalfDepthTexture2D);
-    assert(m_HalfVelocityTexture2D);
-
-    glScissor(0, 0, m_HalfDepthTexture2D->m_Width, m_HalfDepthTexture2D->m_Height);
-    glViewport(0, 0, m_HalfDepthTexture2D->m_Width, m_HalfDepthTexture2D->m_Height);
-
-    m_DownsampleDepthVelocityFramebuffer->Bind();
-
-    assert(m_DepthTexture2D);
-    assert(m_VelocityTexture2D);
-
-    m_DepthTexture2D->Bind(0, m_SamplerClamp);
-    m_VelocityTexture2D->Bind(1, m_SamplerClamp);
-
-    m_DownsampleDepthVelocityShaderProgram->Use();
-
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-    m_HalfDepthTexture2D->GenerateMipMaps();
-    m_HalfVelocityTexture2D->GenerateMipMaps();
 }
 
 void Render::AmbientOcclusionPass() {
@@ -684,9 +683,7 @@ void Render::AmbientOcclusionPass() {
         m_CameraBuffer->Bind(0);
     }
 
-    assert(m_DepthTexture2D);
-
-    m_DepthTexture2D->Bind(0, m_SamplerClamp);
+    m_DepthTextureView2Ds.at(1)->Bind(0, m_SamplerClamp);
 
     m_AmbientOcclusionShaderProgram->Use();
 
@@ -726,7 +723,7 @@ void Render::AmbientOcclusionSpartialPass() {
     assert(m_DepthTexture2D);
 
     m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp);
-    m_HalfDepthTexture2D->Bind(1, m_SamplerClamp);
+    m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
 
     m_AmbientOcclusionSpartialShaderProgram->Use();
 
@@ -753,16 +750,14 @@ void Render::AmbientOcclusionTemporalPass() {
     }
 
     assert(m_AmbientOcclusionSpartialTexture2D);
-    assert(m_HalfDepthTexture2D);
-    assert(m_HalfVelocityTexture2D);
     assert(m_LastAmbientOcclusionTemporalTexture2D);
-    assert(m_LastHalfDepthTexture2D);
+    assert(m_VelocityTexture2D);
 
     m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp);
-    m_HalfDepthTexture2D->Bind(1, m_SamplerClamp);
-    m_HalfVelocityTexture2D->Bind(2, m_SamplerClamp);
-    m_LastAmbientOcclusionTemporalTexture2D->Bind(3, m_SamplerClamp);
-    m_LastHalfDepthTexture2D->Bind(4, m_SamplerClamp);
+    m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
+    m_LastAmbientOcclusionTemporalTexture2D->Bind(2, m_SamplerClamp);
+    m_LastDepthTextureView2Ds.at(1)->Bind(3, m_SamplerClamp);
+    m_VelocityTexture2D->Bind(4, m_SamplerClamp);
 
     m_AmbientOcclusionTemporalShaderProgram->Use();
 
@@ -809,9 +804,9 @@ void Render::LightingPass() {
         m_VertexBuffer->Bind(4);
     }
 
-    assert(m_AmbientOcclusionTemporalTexture2D);
+    assert(m_AmbientOcclusionSpartialTexture2D);
 
-    m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp);
+    m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp);
 
     if (m_DiffuseTexture2DArray) {
         m_DiffuseTexture2DArray->Bind(1, m_SamplerWrap);

@@ -13,7 +13,7 @@ layout(std430, binding = 0) readonly buffer CameraBuffer {
 };
 
 layout(binding = 0) uniform sampler2D g_AmbientOcclusionTexture;
-layout(binding = 1) uniform sampler2D g_HalfDepthTexture;
+layout(binding = 1) uniform sampler2D g_DepthTexture;
 
 in VS_OUT {
     layout(location = 0) smooth vec2 m_Texcoord;
@@ -35,10 +35,10 @@ void main() {
 	ambientOcclusion4x4[1] = textureGatherOffset(g_AmbientOcclusionTexture, texcoord, ivec2( 0, -2));
 	ambientOcclusion4x4[2] = textureGatherOffset(g_AmbientOcclusionTexture, texcoord, ivec2(-2,  0));
 	ambientOcclusion4x4[3] = textureGatherOffset(g_AmbientOcclusionTexture, texcoord, ivec2(-2, -2));
-	depth4x4[0] = textureGather(g_HalfDepthTexture, texcoord);
-	depth4x4[1] = textureGatherOffset(g_HalfDepthTexture, texcoord, ivec2( 0, -2));
-	depth4x4[2] = textureGatherOffset(g_HalfDepthTexture, texcoord, ivec2(-2,  0));
-	depth4x4[3] = textureGatherOffset(g_HalfDepthTexture, texcoord, ivec2(-2, -2));
+	depth4x4[0] = textureGather(g_DepthTexture, texcoord);
+	depth4x4[1] = textureGatherOffset(g_DepthTexture, texcoord, ivec2( 0, -2));
+	depth4x4[2] = textureGatherOffset(g_DepthTexture, texcoord, ivec2(-2,  0));
+	depth4x4[3] = textureGatherOffset(g_DepthTexture, texcoord, ivec2(-2, -2));
 	
 	float depth = LinearizeZ(depth4x4[0].w, g_FarZ, g_NearZ);
 	float totalAO = 0.f;

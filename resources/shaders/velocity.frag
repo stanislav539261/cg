@@ -28,8 +28,8 @@ vec4 ReconstructPosition(float depth, vec2 texcoord) {
 }
 
 void main() {
-    const vec4 position = ReconstructPosition(texture(g_DepthTexture, VS_Output.m_Texcoord).r, VS_Output.m_Texcoord);
-    const vec4 lastPosition = ReconstructPosition(texture(g_LastDepthTexture, VS_Output.m_Texcoord).r, VS_Output.m_Texcoord);
+    const vec4 position = ReconstructPosition(textureLod(g_DepthTexture, VS_Output.m_Texcoord, 0).r, VS_Output.m_Texcoord);
+    const vec4 lastPosition = ReconstructPosition(textureLod(g_LastDepthTexture, VS_Output.m_Texcoord, 0).r, VS_Output.m_Texcoord);
 
     outColor = ((position.xy / position.w - g_Jitter) - (lastPosition.xy / lastPosition.w - g_LastJitter)) * 0.5f;
 }

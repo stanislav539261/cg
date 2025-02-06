@@ -13,10 +13,10 @@ layout(std430, binding = 0) readonly buffer CameraBuffer {
 };
 
 layout(binding = 0) uniform sampler2D g_AmbientOcclusionSpartialTexture;
-layout(binding = 1) uniform sampler2D g_HalfDepthTexture;
-layout(binding = 1) uniform sampler2D g_HalfVelocityTexture;
-layout(binding = 3) uniform sampler2D g_LastAmbientOcclusionTemporalTexture;
-layout(binding = 4) uniform sampler2D g_LastDepthTexture;
+layout(binding = 1) uniform sampler2D g_DepthTexture;
+layout(binding = 2) uniform sampler2D g_LastAmbientOcclusionTemporalTexture;
+layout(binding = 3) uniform sampler2D g_LastDepthTexture;
+layout(binding = 4) uniform sampler2D g_VelocityTexture;
 layout(location = 0) uniform float g_Rate;
 layout(location = 1) uniform vec2 g_ScreenSize;
 
@@ -33,14 +33,14 @@ float LinearizeZ(const float fDepth, const float fNear, const float fFar) {
 void main() {
     const vec2 texcoord = VS_Output.m_Texcoord;
 	const float AO = texture(g_AmbientOcclusionSpartialTexture, texcoord).x;
-	const vec2 velocity	= texture(g_HalfVelocityTexture, texcoord).xy;
+	const vec2 velocity	= texture(g_VelocityTexture, texcoord).xy;
 	const vec4 lastAO4 = textureGather(g_LastAmbientOcclusionTemporalTexture, texcoord - velocity);
 	const vec4 lastDepth4 = textureGather(g_LastDepthTexture, texcoord - velocity);
 	const vec2 offset = (texcoord - velocity) * g_ScreenSize - vec2(0.5f) + vec2(1.f / 512.f);
 	const float weightX = 1.f - fract(offset.x);
 	const float weightY = fract(offset.y);
 
-	const float depth = texture(g_HalfDepthTexture, texcoord).r;
+	const float depth = texture(g_DepthTexture, texcoord).r;
 	const float linearDepth = LinearizeZ(depth, g_FarZ, g_NearZ);
 
 	float weight = 0.f;

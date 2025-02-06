@@ -27,6 +27,7 @@ public:
     void    ClearDepth(GLuint, GLfloat);
     void    SetAttachment(GLenum, const std::shared_ptr<Texture2D> &);
     void    SetAttachment(GLenum, const std::shared_ptr<Texture2DArray> &);
+    void    SetAttachment(GLenum, const std::shared_ptr<TextureView2D> &);
 
     GLuint  m_Handle;
 };

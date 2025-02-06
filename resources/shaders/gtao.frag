@@ -34,7 +34,7 @@ vec3 ReconstructPosition(float depth, vec2 texcoord) {
 vec3 ReconstructNormal(vec2 texcoord, float depthCenter, vec3 center) {
 	vec2 up = vec2(0.f, g_ScreenSizeInv.y);
 	vec2 right = vec2(g_ScreenSizeInv.x, 0.f);
-	float depthUp	= texture(g_DepthTexture, texcoord + up).r;
+	float depthUp = texture(g_DepthTexture, texcoord + up).r;
 	float depthDown = texture(g_DepthTexture, texcoord - up).r;
 	float depthRight = texture(g_DepthTexture, texcoord + right).r;
 	float depthLeft = texture(g_DepthTexture, texcoord - right).r;
@@ -63,7 +63,7 @@ vec3 ReconstructNormal(vec2 texcoord, float depthCenter, vec3 center) {
 
 void main() {
     const vec2 texcoord = VS_Output.m_Texcoord;
-	const float depth = texture(g_DepthTexture, texcoord).r;
+	const float depth = textureLod(g_DepthTexture, texcoord, 0).r;
 	const vec3 center = ReconstructPosition(depth, texcoord);
 	const vec3 v = normalize(-center);
 	const vec3 normal = ReconstructNormal(texcoord, depth, center);
@@ -92,8 +92,9 @@ void main() {
 		for (int i = 0; i < kNumDirectionSamples; i++) {
 			offset += (-1.f + 2.f * side) * direction.xy * (stepSize);
 
-			const vec4 depth4 = textureGather(g_DepthTexture, texcoord + offset);
-			const vec3 samplePos = ReconstructPosition(min(min(depth4.x, depth4.y), min(depth4.z, depth4.w)), texcoord + offset);
+			const float lod = floor(log2(max(texcoord.x + offset.x, texcoord.y + offset.y) * 0.5f));
+			const float depth = textureLod(g_DepthTexture, texcoord + offset, lod).r;
+			const vec3 samplePos = ReconstructPosition(depth, texcoord + offset);
 			const vec3 horizonPos = samplePos - center;
 			const float horizonLength = length(horizonPos);
             

@@ -187,7 +187,6 @@ Render::Render() {
             auto lightingTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_RGBA16F);
             auto shadowCsmColorTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F);
             auto shadowCsmDepthTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F);
-            auto velocityTexture2D = std::make_shared<Texture2D>(width / 2, height / 2, 1, GL_RG16F);
 
             auto depthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
             auto lastDepthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
@@ -233,9 +232,6 @@ Render::Render() {
             shadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, shadowCsmColorTexture2DArray);
             shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
 
-            auto velocityFramebuffer = std::make_shared<Framebuffer>();
-            velocityFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, velocityTexture2D);
-
             // Create shader programs
             auto ambientOcclusionShaderProgram = std::make_shared<ShaderProgram>();
             assert(ambientOcclusionShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao.vert"));
@@ -268,10 +264,6 @@ Render::Render() {
             assert(shadowCsmShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_csm.vert"));
             assert(shadowCsmShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_csm.geom"));
             assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
-
-            auto velocityShaderProgram = std::make_shared<ShaderProgram>();
-            assert(velocityShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/velocity.vert"));
-            assert(velocityShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/velocity.frag"));
 
             m_AmbientOcclusionFramebuffer = ambientOcclusionFramebuffer;
             m_AmbientOcclusionShaderProgram = ambientOcclusionShaderProgram;
@@ -307,9 +299,6 @@ Render::Render() {
             m_ShadowCsmDepthTexture2DArray = shadowCsmDepthTexture2DArray;
             m_ShadowCsmFramebuffer = shadowCsmFramebuffer;
             m_ShadowCsmShaderProgram = shadowCsmShaderProgram;
-            m_VelocityFramebuffer = velocityFramebuffer;
-            m_VelocityShaderProgram = velocityShaderProgram;
-            m_VelocityTexture2D = velocityTexture2D;
         } else {
             std::cout << "Can't initialize GLEW. " << glewGetErrorString(result) << std::endl;
         }
@@ -504,7 +493,6 @@ void Render::Update() {
     ShadowCsmPass();
     DepthPass();
     DownsampleDepthPass();
-    VelocityPass();
     AmbientOcclusionPass();
     AmbientOcclusionSpartialPass();
     AmbientOcclusionTemporalPass();
@@ -627,43 +615,6 @@ void Render::DownsampleDepthPass() {
     }
 }
 
-void Render::VelocityPass() {
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-    assert(m_VelocityFramebuffer);
-    assert(m_VelocityShaderProgram);
-    assert(m_VelocityTexture2D);
-
-    glScissor(0, 0, m_VelocityTexture2D->m_Width, m_VelocityTexture2D->m_Height);
-    glViewport(0, 0, m_VelocityTexture2D->m_Width, m_VelocityTexture2D->m_Height);
-
-    m_VelocityFramebuffer->Bind();
-
-    if (m_CameraBuffer) {
-        m_CameraBuffer->Bind(0);
-    }
-
-    m_DepthTextureView2Ds.at(1)->Bind(0, m_SamplerClamp);
-    m_LastDepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
-
-    m_VelocityShaderProgram->Use();
-
-    auto rd = std::random_device();
-    auto gen = std::mt19937(rd());
-    auto dist = std::uniform_real_distribution<>();
-
-    auto jitter0 = glm::vec2(dist(gen) * 1.f / m_VelocityTexture2D->m_Width, dist(gen) * 1.f / m_VelocityTexture2D->m_Height);
-    auto jitter1 = glm::vec2(dist(gen) * 1.f / m_VelocityTexture2D->m_Width, dist(gen) * 1.f / m_VelocityTexture2D->m_Height);
-
-    glUniform2fv(0, 1, reinterpret_cast<float *>(&jitter0));
-    glUniform2fv(1, 1, reinterpret_cast<float *>(&jitter1));
-
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-}
-
 void Render::AmbientOcclusionPass() {
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
@@ -751,13 +702,11 @@ void Render::AmbientOcclusionTemporalPass() {
 
     assert(m_AmbientOcclusionSpartialTexture2D);
     assert(m_LastAmbientOcclusionTemporalTexture2D);
-    assert(m_VelocityTexture2D);
 
     m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp);
     m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
     m_LastAmbientOcclusionTemporalTexture2D->Bind(2, m_SamplerClamp);
     m_LastDepthTextureView2Ds.at(1)->Bind(3, m_SamplerClamp);
-    m_VelocityTexture2D->Bind(4, m_SamplerClamp);
 
     m_AmbientOcclusionTemporalShaderProgram->Use();
 

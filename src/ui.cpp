@@ -51,15 +51,18 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
 
             ImGui::Begin("Menu");
 
+            // Global
             ImGui::Checkbox("Enable Ambient Occlusion", &g_Render->m_EnableAmbientOcclusion);
             ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);
 
+            // LightEnvironment
             ImGui::SeparatorText("LightEnvironment");
             ImGui::SliderFloat3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor), 0.f, 1.f);
             ImGui::SliderFloat3("Base color", reinterpret_cast<float *>(&g_LightEnvironment->m_BaseColor), 0.f, 1.f);
             ImGui::SliderFloat("Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
             ImGui::SliderFloat("Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
 
+            // LightPoints
             auto i = 0u;
 
             for (; i < g_LightPoints.size(); i++) {
@@ -87,6 +90,11 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
 
                 g_LightPoints.push_back(lightPoint);
             };
+
+            // Shadows
+            ImGui::SeparatorText("Shadows");
+            ImGui::SliderFloat("CSM filter radius", &g_Render->m_ShadowCsmFilterRadius, 0.f, 16.f);
+            ImGui::SliderFloat("Cube filter radius", &g_Render->m_ShadowCubeFilterRadius, 0.f, 16.f);
 
             ImGui::End();
         } else {

@@ -52,6 +52,18 @@ void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<Texture
     glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
 }
 
+void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureCube> &texture) {
+    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
+}
+
+void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureCubeArray> &texture) {
+    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
+}
+
 void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureView2D> &texture) {
+    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
+}
+
+void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureViewCube> &texture) {
     glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
 }

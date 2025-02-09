@@ -164,6 +164,38 @@ Texture2DArray::~Texture2DArray() {
     glDeleteTextures(1, &m_Handle);
 }
 
+TextureCube::TextureCube(GLuint width, GLuint height, GLuint mipLevel, GLuint format) {
+    m_Target = GL_TEXTURE_CUBE_MAP;
+
+    glCreateTextures(m_Target, 1, &m_Handle);
+    glTextureStorage2D(m_Handle, mipLevel, format, width, height);
+
+    m_Format = format;
+    m_Height = height;
+    m_MipLevel = mipLevel;
+    m_Width = width;
+}
+
+TextureCube::~TextureCube() {
+    glDeleteTextures(1, &m_Handle);
+}
+
+TextureCubeArray::TextureCubeArray(GLuint width, GLuint height, GLuint depth, GLuint mipLevel, GLuint format) {
+    m_Target = GL_TEXTURE_CUBE_MAP_ARRAY;
+
+    glCreateTextures(m_Target, 1, &m_Handle);
+    glTextureStorage3D(m_Handle, mipLevel, format, width, height, depth);
+
+    m_Format = format;
+    m_Height = height;
+    m_MipLevel = mipLevel;
+    m_Width = width;
+}
+
+TextureCubeArray::~TextureCubeArray() {
+    glDeleteTextures(1, &m_Handle);
+}
+
 void TextureView::Bind(GLuint binding) {
     glBindTextureUnit(binding, m_Handle);
 }
@@ -174,11 +206,20 @@ void TextureView::Bind(GLuint binding, const std::shared_ptr<const Sampler> &sam
     glBindSampler(binding, sampler->m_Handle);
 }
 
-TextureView2D::TextureView2D(std::shared_ptr<const Texture> texture, GLuint minLevel, GLuint numLevels) {
+TextureView2D::TextureView2D(std::shared_ptr<const Texture> texture, GLuint minLevel, GLuint numLevels, GLuint minLayer) {
     glGenTextures(1, &m_Handle);
-    glTextureView(m_Handle, GL_TEXTURE_2D, texture->m_Handle, texture->m_Format, minLevel, numLevels, 0, 1);
+    glTextureView(m_Handle, GL_TEXTURE_2D, texture->m_Handle, texture->m_Format, minLevel, numLevels, minLayer, 1);
 }
 
 TextureView2D::~TextureView2D() {
+    glDeleteTextures(1, &m_Handle);
+}
+
+TextureViewCube::TextureViewCube(std::shared_ptr<const Texture> texture, GLuint minLevel, GLuint numLevels, GLuint minLayer) {
+    glGenTextures(1, &m_Handle);
+    glTextureView(m_Handle, GL_TEXTURE_CUBE_MAP, texture->m_Handle, texture->m_Format, minLevel, numLevels, minLayer, 6);
+}
+
+TextureViewCube::~TextureViewCube() {
     glDeleteTextures(1, &m_Handle);
 }

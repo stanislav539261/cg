@@ -60,12 +60,14 @@ layout(binding = 3) uniform sampler2DArray g_NormalTextures;
 layout(binding = 4) uniform sampler2DArray g_RoughnessTextures;
 layout(binding = 5) uniform sampler2DArray g_ShadowCsmColorTextures;
 layout(binding = 6) uniform sampler2DArray g_ShadowCsmDepthTextures;
+layout(binding = 7) uniform samplerCubeArray g_ShadowCubeColorTextures;
+layout(binding = 8) uniform samplerCubeArray g_ShadowCubeDepthTextures;
 
 layout(location = 0) uniform bool g_EnableAmbientOcclusion;
 layout(location = 1) uniform bool g_EnableReverseZ;
 layout(location = 2) uniform uint g_NumLightPoints;
-layout(location = 3) uniform float g_ShadowCsmSizeInv;
-layout(location = 4) uniform float g_ShadowCubeSizeInv;
+layout(location = 3) uniform float g_ShadowCsmFilterRadius;
+layout(location = 4) uniform float g_ShadowCubeFilterRadius;
 
 in VS_OUT {
     layout(location = 0) smooth vec3 m_FragPos;
@@ -127,11 +129,9 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
         //     bias *= 1.f / (g_LightEnvironment.m_CascadePlaneDistances[layer] * biasModifier);
         // }
 
-        const float filterRadius = g_ShadowCsmSizeInv * 2.f;
-
         for (uint i = 0; i < 16; i++) {
             vec2 poisson = SHADOW_POISSON[i];
-            vec2 offset = poisson * filterRadius;
+            vec2 offset = poisson * g_ShadowCsmFilterRadius;
             float momentX = textureLod(g_ShadowCsmDepthTextures, vec3(projCoords.xy + offset, layer), 0).r;
             float momentY = textureLod(g_ShadowCsmColorTextures, vec3(projCoords.xy + offset, layer), 0).r;
 
@@ -166,6 +166,46 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
     }
 
     return shadow;
+}
+
+float ComputeShadowCube(const vec3 lightDir, const float lightZ, const uint layer) {
+    vec3 up;
+
+    if ((abs(lightDir.x) < 0.0001f) && (abs(lightDir.z) < 0.0001f)) {
+        up = (lightDir.y > 0.f) ? vec3(0.f, 0.f, -1.f) : vec3(0.f, 0.f, 1.f);
+    } else {
+        up = vec3(0.f, 1.f, 0.f);
+    }
+
+    const vec3 right = normalize(cross(up, lightDir));
+
+    up = normalize(cross(lightDir, right));
+
+    const mat3 rotation = mat3(right, up, -lightDir);
+
+    float shadow = 0.f;
+
+    for (uint i = 0; i < 16; i++) {
+        const vec2 poisson = SHADOW_POISSON[i];
+
+        vec4 texcoord;
+
+        texcoord.xy = poisson * g_ShadowCubeFilterRadius;
+        texcoord.z = -sqrt(1.f - dot(texcoord.xy, texcoord.xy));
+        texcoord.w = float(layer);
+        texcoord.xyz = rotation * texcoord.xyz;
+
+        const float momentX = texture(g_ShadowCubeDepthTextures, texcoord).r;
+        const float momentY = texture(g_ShadowCubeColorTextures, texcoord).r;
+        const float variance = max(momentY - (momentX * momentX), 0.000002f);
+        const float penumbra = step(lightZ, momentX);
+        const float distX = lightZ - momentX;
+        const float penumbraMax = variance / (variance + distX * distX);
+
+        shadow += clamp((max(penumbra, penumbraMax) - SHADOW_AMOUNT) / (1.f - SHADOW_AMOUNT), 0.f, 1.f);
+    }
+    
+    return shadow * 1.f / 16.f;
 }
 
 vec3 ComputeFresnelSchlick(vec3 F0, float cosTheta) {
@@ -271,7 +311,7 @@ vec3 ComputeLighting(
             const float lightAttenuation = lightDist2Rev2 * 1.f / (1.f + lightDist);
 
             const vec3 localLighting = g_LightPoints[i].m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, albedo, metalness, roughness);  
-            lighting += localLighting * lightAttenuation;
+            lighting += localLighting * lightAttenuation * ComputeShadowCube(-lightDir, lightDist, i);
         }
     }
 

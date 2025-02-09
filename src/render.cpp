@@ -194,8 +194,8 @@ Render::Render() {
             auto lastDepthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
 
             for (auto i = 0u; i < mipLevel; i++) {
-                depthTextureView2Ds.push_back(std::make_shared<TextureView2D>(depthTexture2D, i, mipLevel - i));
-                lastDepthTextureView2Ds.push_back(std::make_shared<TextureView2D>(lastDepthTexture2D, i, mipLevel - i));
+                depthTextureView2Ds.push_back(std::make_shared<TextureView2D>(depthTexture2D, i, mipLevel - i, 0));
+                lastDepthTextureView2Ds.push_back(std::make_shared<TextureView2D>(lastDepthTexture2D, i, mipLevel - i, 0));
             }
 
             // Create framebuffers
@@ -231,6 +231,8 @@ Render::Render() {
             shadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, shadowCsmColorTexture2DArray);
             shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
 
+            auto shadowCubeFramebuffer = std::make_shared<Framebuffer>();
+
             // Create shader programs
             auto ambientOcclusionShaderProgram = std::make_shared<ShaderProgram>();
             assert(ambientOcclusionShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao.vert"));
@@ -264,6 +266,11 @@ Render::Render() {
             assert(shadowCsmShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_csm.geom"));
             assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
 
+            auto shadowCubeShaderProgram = std::make_shared<ShaderProgram>();
+            assert(shadowCubeShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_cube.vert"));
+            assert(shadowCubeShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_cube.geom"));
+            assert(shadowCubeShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_cube.frag"));
+
             m_AmbientOcclusionFramebuffer = ambientOcclusionFramebuffer;
             m_AmbientOcclusionShaderProgram = ambientOcclusionShaderProgram;
             m_AmbientOcclusionTexture2D = ambientOcclusionTexture2D;
@@ -295,8 +302,12 @@ Render::Render() {
             m_ScreenShaderProgram = screenShaderProgram;
             m_ShadowCsmColorTexture2DArray = shadowCsmColorTexture2DArray;
             m_ShadowCsmDepthTexture2DArray = shadowCsmDepthTexture2DArray;
+            m_ShadowCsmFilterRadius = 2.f;
             m_ShadowCsmFramebuffer = shadowCsmFramebuffer;
             m_ShadowCsmShaderProgram = shadowCsmShaderProgram;
+            m_ShadowCubeFilterRadius = 2.f;
+            m_ShadowCubeFramebuffer = shadowCubeFramebuffer;
+            m_ShadowCubeShaderProgram = shadowCubeShaderProgram;
         } else {
             std::cout << "Can't initialize GLEW. " << glewGetErrorString(result) << std::endl;
         }
@@ -502,6 +513,44 @@ void Render::Update() {
         }
     }
 
+    if (!m_ShadowCubeColorTextureCubeArray || m_ShadowCubeColorTextureCubeArray->m_Depth != g_LightPoints.size() * 6) {
+        const auto layers = std::max(g_LightPoints.size() * 6lu, 6lu);
+        const auto size = SHADOW_CUBE_SIZE;
+
+        m_ShadowCubeColorTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_R32F);
+        m_ShadowCubeColorTextureViewCubes.clear();
+    
+        while (m_ShadowCubeColorTextureViewCubes.size() < g_LightPoints.size()) {
+            m_ShadowCubeColorTextureViewCubes.push_back(
+                std::make_shared<TextureViewCube>(
+                    m_ShadowCubeColorTextureCubeArray, 
+                    0, 
+                    1, 
+                    m_ShadowCubeColorTextureViewCubes.size() * 6
+                )
+            );
+        }
+    }
+
+    if (!m_ShadowCubeDepthTextureCubeArray || m_ShadowCubeDepthTextureCubeArray->m_Depth != g_LightPoints.size() * 6) {
+        const auto layers = std::max(g_LightPoints.size() * 6lu, 6lu);
+        const auto size = SHADOW_CUBE_SIZE;
+
+        m_ShadowCubeDepthTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_DEPTH_COMPONENT32F);
+        m_ShadowCubeDepthTextureViewCubes.clear();
+
+        while (m_ShadowCubeDepthTextureViewCubes.size() < g_LightPoints.size()) {
+            m_ShadowCubeDepthTextureViewCubes.push_back(
+                std::make_shared<TextureViewCube>(
+                    m_ShadowCubeDepthTextureCubeArray, 
+                    0, 
+                    1, 
+                    m_ShadowCubeDepthTextureViewCubes.size() * 6
+                )
+            );
+        }
+    }
+
     std::swap(m_AmbientOcclusionTemporalTexture2D, m_LastAmbientOcclusionTemporalTexture2D);
     std::swap(m_DepthFramebuffer, m_LastDepthFramebuffer);
     std::swap(m_DepthTexture2D, m_LastDepthTexture2D);
@@ -510,6 +559,7 @@ void Render::Update() {
 
     // Draw model
     ShadowCsmPass();
+    ShadowCubePass();
     DepthPass();
     DownsampleDepthPass();
     AmbientOcclusionPass();
@@ -557,6 +607,49 @@ void Render::ShadowCsmPass() {
         m_DrawIndirectBuffer->Bind();
 
         glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
+    }
+}
+
+void Render::ShadowCubePass() {
+    assert(m_ShadowCubeFramebuffer);
+    assert(m_ShadowCubeShaderProgram);
+
+    m_ShadowCubeFramebuffer->Bind();
+    m_ShadowCubeShaderProgram->Use();
+
+    glCullFace(GL_BACK);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(true);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glFrontFace(GL_CCW);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glScissor(0, 0, m_ShadowCubeColorTextureCubeArray->m_Width, m_ShadowCubeColorTextureCubeArray->m_Height);
+    glViewport(0, 0, m_ShadowCubeColorTextureCubeArray->m_Width, m_ShadowCubeColorTextureCubeArray->m_Height);
+
+    if (m_IndexBuffer) {
+        m_IndexBuffer->Bind(0);
+    }
+    if (m_LightPointBuffer) {
+        m_LightPointBuffer->Bind(1);
+    }
+    if (m_VertexBuffer) {
+        m_VertexBuffer->Bind(2);
+    }
+
+    for (auto i = 0u; i < m_ShadowCubeColorTextureViewCubes.size(); i++) {
+        m_ShadowCubeFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCubeColorTextureViewCubes.at(i));
+        m_ShadowCubeFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_ShadowCubeDepthTextureViewCubes.at(i));
+        m_ShadowCubeFramebuffer->ClearColor(0, 1.f, 1.f, 1.f, 1.f);
+        m_ShadowCubeFramebuffer->ClearDepth(0, 1.f);
+
+        glUniform1ui(0, i);
+
+        if (m_DrawIndirectBuffer) {
+            m_DrawIndirectBuffer->Bind();
+
+            glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
+        }
     }
 }
 
@@ -789,13 +882,20 @@ void Render::LightingPass() {
     m_ShadowCsmColorTexture2DArray->Bind(5, m_SamplerBorderWhite);
     m_ShadowCsmDepthTexture2DArray->Bind(6, m_SamplerBorderWhite);
 
+    if (m_ShadowCubeColorTextureCubeArray) {
+        m_ShadowCubeColorTextureCubeArray->Bind(7, m_SamplerClamp);  
+    }
+    if (m_ShadowCubeDepthTextureCubeArray) {
+        m_ShadowCubeDepthTextureCubeArray->Bind(8, m_SamplerClamp);  
+    }
+
     m_LightingShaderProgram->Use();
 
     glUniform1i(0, m_EnableAmbientOcclusion);
     glUniform1i(1, m_EnableReverseZ);
     glUniform1ui(2, g_LightPoints.size());
-    glUniform1f(3, 1.f / SHADOW_CSM_SIZE);
-    glUniform1f(4, 1.f / SHADOW_CUBE_SIZE);
+    glUniform1f(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
+    glUniform1f(4, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();

@@ -69,9 +69,12 @@ public:
     SDL_GLContext                                   m_Context;
     bool                                            m_EnableAmbientOcclusion;
     bool                                            m_EnableReverseZ;
+    float                                           m_ShadowCsmFilterRadius;
+    float                                           m_ShadowCubeFilterRadius;
 
 private:
     void                                            ShadowCsmPass();
+    void                                            ShadowCubePass();
     void                                            DepthPass();
     void                                            DownsampleDepthPass();
     void                                            AmbientOcclusionPass();
@@ -125,6 +128,12 @@ private:
     std::shared_ptr<Texture2DArray>                 m_ShadowCsmDepthTexture2DArray;
     std::shared_ptr<Framebuffer>                    m_ShadowCsmFramebuffer;
     std::shared_ptr<ShaderProgram>                  m_ShadowCsmShaderProgram;
+    std::shared_ptr<TextureCubeArray>               m_ShadowCubeColorTextureCubeArray;
+    std::vector<std::shared_ptr<TextureViewCube>>   m_ShadowCubeColorTextureViewCubes;
+    std::shared_ptr<TextureCubeArray>               m_ShadowCubeDepthTextureCubeArray;
+    std::vector<std::shared_ptr<TextureViewCube>>   m_ShadowCubeDepthTextureViewCubes;
+    std::shared_ptr<Framebuffer>                    m_ShadowCubeFramebuffer;
+    std::shared_ptr<ShaderProgram>                  m_ShadowCubeShaderProgram;
     std::shared_ptr<Buffer<GpuVertex>>              m_VertexBuffer;
 };
 

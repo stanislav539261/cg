@@ -46,6 +46,25 @@ public:
     GLuint  m_Depth;
 };
 
+class TextureCube : public Texture {
+public:
+    TextureCube(GLuint, GLuint, GLuint, GLuint);
+    ~TextureCube();
+
+    GLuint  m_Width;
+    GLuint  m_Height;
+};
+
+class TextureCubeArray : public Texture {
+public:
+    TextureCubeArray(GLuint, GLuint, GLuint, GLuint, GLuint);
+    ~TextureCubeArray();
+    
+    GLuint  m_Width;
+    GLuint  m_Height;
+    GLuint  m_Depth;
+};
+
 class TextureView {
 public:
     void    Bind(GLuint);
@@ -58,8 +77,14 @@ public:
 
 class TextureView2D : public TextureView {
 public:
-    TextureView2D(std::shared_ptr<const Texture>, GLuint, GLuint);
+    TextureView2D(std::shared_ptr<const Texture>, GLuint, GLuint, GLuint);
     ~TextureView2D();
+};
+
+class TextureViewCube : public TextureView {
+public:
+    TextureViewCube(std::shared_ptr<const Texture>, GLuint, GLuint, GLuint);
+    ~TextureViewCube();
 };
 
 #endif /* TEXTURE_HPP */

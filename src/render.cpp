@@ -212,9 +212,6 @@ Render::Render() {
             auto downsampleDepthFramebuffer = std::make_shared<Framebuffer>();
             downsampleDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTextureView2Ds[0]);
 
-            auto lastAmbientOcclusionTemporalFramebuffer = std::make_shared<Framebuffer>();
-            lastAmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lastAmbientOcclusionTemporalTexture2D);
-
             auto lastDepthFramebuffer = std::make_shared<Framebuffer>();
             lastDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
 
@@ -281,7 +278,6 @@ Render::Render() {
             m_DepthTextureView2Ds = depthTextureView2Ds;
             m_DownsampleDepthFramebuffer = downsampleDepthFramebuffer;
             m_DownsampleDepthShaderProgram = downsampleDepthShaderProgram;
-            m_LastAmbientOcclusionTemporalFramebuffer = lastAmbientOcclusionTemporalFramebuffer;
             m_LastAmbientOcclusionTemporalTexture2D = lastAmbientOcclusionTemporalTexture2D;
             m_LastDepthFramebuffer = lastDepthFramebuffer;
             m_LastDepthTexture2D = lastDepthTexture2D;
@@ -442,6 +438,8 @@ void Render::Update() {
     // Update camera
     assert(g_Camera);
 
+    static glm::mat4 cameraLastView = glm::identity<glm::mat4>();
+
     auto cameraProjection = g_Camera->Projection(m_EnableReverseZ);
     auto cameraFovY = glm::radians(g_Camera->m_FovY);
     auto cameraHalfFovY = cameraFovY * 0.5f;
@@ -452,6 +450,7 @@ void Render::Update() {
     auto cameraView = g_Camera->View();
 
     auto gpuCamera = GpuCamera {
+        .m_LastView = cameraLastView,
         .m_Projection = cameraProjection,
         .m_ProjectionInversed = glm::inverse(cameraProjection),
         .m_View = cameraView,
@@ -461,6 +460,8 @@ void Render::Update() {
         .m_FovX = cameraFovX,
         .m_FovY = cameraFovY,
     };
+
+    cameraLastView = std::move(cameraView);
 
     m_CameraBuffer->SetData(gpuCamera, 0);
 
@@ -482,7 +483,6 @@ void Render::Update() {
         m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
     }
 
-    std::swap(m_AmbientOcclusionTemporalFramebuffer, m_LastAmbientOcclusionTemporalFramebuffer);
     std::swap(m_AmbientOcclusionTemporalTexture2D, m_LastAmbientOcclusionTemporalTexture2D);
     std::swap(m_DepthFramebuffer, m_LastDepthFramebuffer);
     std::swap(m_DepthTexture2D, m_LastDepthTexture2D);
@@ -616,85 +616,83 @@ void Render::DownsampleDepthPass() {
 }
 
 void Render::AmbientOcclusionPass() {
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
     assert(m_AmbientOcclusionFramebuffer);
     assert(m_AmbientOcclusionShaderProgram);
     assert(m_AmbientOcclusionTexture2D);
 
+    m_AmbientOcclusionFramebuffer->Bind();
+    m_AmbientOcclusionFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionTexture2D);
+    m_AmbientOcclusionShaderProgram->Use();
+
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glScissor(0, 0, m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
     glViewport(0, 0, m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
-
-    m_AmbientOcclusionFramebuffer->Bind();
 
     if (m_CameraBuffer) {
         m_CameraBuffer->Bind(0);
     }
 
-    m_DepthTextureView2Ds.at(1)->Bind(0, m_SamplerClamp);
-
-    m_AmbientOcclusionShaderProgram->Use();
+    m_DepthTextureView2Ds.at(0)->Bind(0, m_SamplerClamp);
 
     auto screenSize = glm::vec2(m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
     auto screenSizeInv = glm::vec2(1.f / m_AmbientOcclusionTexture2D->m_Width, 1.f / m_AmbientOcclusionTexture2D->m_Height);
 
-    const float rotations[] = { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
+    constexpr std::array<float, 4> offsets = { 0.0f, 0.5f, 0.25f, 0.75f };
+    constexpr std::array<float, 6> rotations = { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
 
-    glUniform2fv(0, 1, reinterpret_cast<float *>(&screenSize));
-    glUniform2fv(1, 1, reinterpret_cast<float *>(&screenSizeInv));
-    glUniform1f(2, 4.f);
-    glUniform1f(3, rotations[m_NumFrames % 6] / 360.f * 2.f * 3.14159265358979323846f);
+    glUniform1f(0, 1000.f);
+    glUniform1f(1, 1.f);
+    glUniform1i(2, 8);
+    glUniform1f(3, offsets[m_NumFrames / 6 % offsets.size()]);
+    glUniform1f(4, 8.f);
+    glUniform1f(5, rotations[m_NumFrames % 6] / 360.f);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 void Render::AmbientOcclusionSpartialPass() {
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
     assert(m_AmbientOcclusionSpartialFramebuffer);
     assert(m_AmbientOcclusionSpartialShaderProgram);
     assert(m_AmbientOcclusionSpartialTexture2D);
 
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glScissor(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Width, m_AmbientOcclusionSpartialTexture2D->m_Height);
     glViewport(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Width, m_AmbientOcclusionSpartialTexture2D->m_Height);
 
     m_AmbientOcclusionSpartialFramebuffer->Bind();
+    m_AmbientOcclusionSpartialFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionSpartialTexture2D);
+    m_AmbientOcclusionSpartialShaderProgram->Use();
 
     if (m_CameraBuffer) {
         m_CameraBuffer->Bind(0);
     }
 
     assert(m_AmbientOcclusionTexture2D);
-    assert(m_DepthTexture2D);
 
     m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp);
     m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
-
-    m_AmbientOcclusionSpartialShaderProgram->Use();
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 void Render::AmbientOcclusionTemporalPass() {
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
     assert(m_AmbientOcclusionTemporalFramebuffer);
     assert(m_AmbientOcclusionTemporalShaderProgram);
     assert(m_AmbientOcclusionTemporalTexture2D);
 
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glScissor(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
     glViewport(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
 
     m_AmbientOcclusionTemporalFramebuffer->Bind();
+    m_AmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionTemporalTexture2D);
+    m_AmbientOcclusionTemporalShaderProgram->Use();
 
     if (m_CameraBuffer) {
         m_CameraBuffer->Bind(0);
@@ -707,13 +705,6 @@ void Render::AmbientOcclusionTemporalPass() {
     m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
     m_LastAmbientOcclusionTemporalTexture2D->Bind(2, m_SamplerClamp);
     m_LastDepthTextureView2Ds.at(1)->Bind(3, m_SamplerClamp);
-
-    m_AmbientOcclusionTemporalShaderProgram->Use();
-
-    auto screenSize = glm::vec2(m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
-
-    glUniform1f(0, 0.7f);
-    glUniform2fv(1, 1, reinterpret_cast<float *>(&screenSize));
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -753,9 +744,9 @@ void Render::LightingPass() {
         m_VertexBuffer->Bind(4);
     }
 
-    assert(m_AmbientOcclusionSpartialTexture2D);
+    assert(m_AmbientOcclusionTemporalTexture2D);
 
-    m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp);
+    m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp);
 
     if (m_DiffuseTexture2DArray) {
         m_DiffuseTexture2DArray->Bind(1, m_SamplerWrap);
@@ -802,7 +793,7 @@ void Render::ScreenPass() {
     assert(m_ScreenFramebuffer);
     assert(m_ScreenShaderProgram);
 
-    m_ScreenFramebuffer->Bind();
+    m_ScreenFramebuffer->Bind(); 
 
     m_LightingTexture2D->Bind(0, m_SamplerClamp);
 

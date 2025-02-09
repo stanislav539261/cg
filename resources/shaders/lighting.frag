@@ -19,6 +19,9 @@ struct Material {
 };
 
 layout(std430, binding = 0) readonly buffer CameraBuffer {
+    mat4  g_LastProjection;
+    mat4  g_LastProjectionInversed;
+    mat4  g_LastView;
     mat4  g_Projection;
     mat4  g_ProjectionInversed;
     mat4  g_View;
@@ -26,8 +29,8 @@ layout(std430, binding = 0) readonly buffer CameraBuffer {
     float m_Padding0;
     float g_FarZ;
     float g_NearZ;
-    float m_Padding1;
-    float m_Padding2;
+    float g_FovX;
+    float g_FovY;
 };
 
 layout(std430, binding = 2) readonly buffer LightEnvironmentBuffer {

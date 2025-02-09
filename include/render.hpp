@@ -14,6 +14,9 @@
 #include "texture.hpp"
 
 struct GpuCamera {
+    glm::mat4   m_LastProjection;
+    glm::mat4   m_LastProjectionInversed;
+    glm::mat4   m_LastView;
     glm::mat4   m_Projection;
     glm::mat4   m_ProjectionInversed;
     glm::mat4   m_View;
@@ -88,7 +91,6 @@ private:
     std::shared_ptr<ShaderProgram>                  m_DownsampleDepthShaderProgram;
     std::shared_ptr<DrawIndirectBuffer>             m_DrawIndirectBuffer;
     std::shared_ptr<Buffer<GpuIndex>>               m_IndexBuffer;
-    std::shared_ptr<Framebuffer>                    m_LastAmbientOcclusionTemporalFramebuffer;
     std::shared_ptr<Texture2D>                      m_LastAmbientOcclusionTemporalTexture2D;
     std::shared_ptr<Framebuffer>                    m_LastDepthFramebuffer;
     std::shared_ptr<Texture2D>                      m_LastDepthTexture2D;

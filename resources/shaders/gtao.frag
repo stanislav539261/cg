@@ -3,6 +3,9 @@
 #define M_PI 3.1415926535897932384626433832795f
 
 layout(std430, binding = 0) readonly buffer CameraBuffer {
+    mat4  g_LastProjection;
+    mat4  g_LastProjectionInversed;
+    mat4  g_LastView;
     mat4  g_Projection;
     mat4  g_ProjectionInversed;
     mat4  g_View;
@@ -10,15 +13,17 @@ layout(std430, binding = 0) readonly buffer CameraBuffer {
     float m_Padding0;
     float g_FarZ;
     float g_NearZ;
-    float m_Padding1;
-    float m_Padding2;
+    float g_FovX;
+    float g_FovY;
 };
 
 layout(binding = 0) uniform sampler2D g_DepthTexture;
-layout(location = 0) uniform vec2 g_ScreenSize;
-layout(location = 1) uniform vec2 g_ScreenSizeInv;
-layout(location = 2) uniform float g_Radius;
-layout(location = 3) uniform float g_Rotation;
+layout(location = 0) uniform float g_FalloffFar;
+layout(location = 1) uniform float g_FalloffNear;
+layout(location = 2) uniform int g_NumSamples;
+layout(location = 3) uniform float g_Offset;
+layout(location = 4) uniform float g_Radius;
+layout(location = 5) uniform float g_Rotation;
 
 in VS_OUT {
     layout(location = 0) smooth vec2 m_Texcoord;
@@ -26,86 +31,104 @@ in VS_OUT {
 
 layout(location = 0) out float outColor;
 
-vec3 ReconstructPosition(float depth, vec2 texcoord) {
-	const vec4 pos = g_ProjectionInversed * vec4(texcoord * 2 - 1, depth, 1);
+vec3 ReconstructViewPos(vec3 srcPos) {
+	const vec4 pos = g_ProjectionInversed * vec4(srcPos.xy * 2.f - 1.f, srcPos.z, 1);
 	return pos.xyz / pos.w;
 }
 
-vec3 ReconstructNormal(vec2 texcoord, float depthCenter, vec3 center) {
-	vec2 up = vec2(0.f, g_ScreenSizeInv.y);
-	vec2 right = vec2(g_ScreenSizeInv.x, 0.f);
-	float depthUp = texture(g_DepthTexture, texcoord + up).r;
-	float depthDown = texture(g_DepthTexture, texcoord - up).r;
-	float depthRight = texture(g_DepthTexture, texcoord + right).r;
-	float depthLeft = texture(g_DepthTexture, texcoord - right).r;
-	bool isUpCloser = abs(depthUp - depthCenter) < abs(depthDown - depthCenter);
-	bool isRightCloser = abs(depthRight - depthCenter) < abs(depthLeft - depthCenter);
+vec3 ReconstructNormal(vec3 srcPos, vec3 viewPos) {
+	const vec2 size = textureSize(g_DepthTexture, 0);
+	const vec2 up = vec2(0.f, 1.f / size.y);
+	const vec2 right = vec2(1.f / size.x, 0.f);
+	const float depthUp = textureLod(g_DepthTexture, srcPos.xy + up, 0).r;
+	const float depthDown = textureLod(g_DepthTexture, srcPos.xy - up, 0).r;
+	const float depthRight = textureLod(g_DepthTexture, srcPos.xy + right, 0).r;
+	const float depthLeft = textureLod(g_DepthTexture, srcPos.xy - right, 0).r;
+	const bool isUpCloser = abs(depthUp - srcPos.z) < abs(depthDown - srcPos.z);
+	const bool isRightCloser = abs(depthRight - srcPos.z) < abs(depthLeft - srcPos.z);
 
 	vec3 p0;
 	vec3 p1;
 
 	if (isUpCloser && isRightCloser) {
-		p0 = vec3(texcoord + right, depthRight);
-		p1 = vec3(texcoord + up, depthUp);
+		p0 = vec3(srcPos.xy + right, depthRight);
+		p1 = vec3(srcPos.xy + up, depthUp);
 	} else if (isUpCloser && !isRightCloser) {
-		p0 = vec3(texcoord + up, depthUp);
-		p1 = vec3(texcoord - right, depthLeft);
+		p0 = vec3(srcPos.xy + up, depthUp);
+		p1 = vec3(srcPos.xy - right, depthLeft);
 	} else if (!isUpCloser && isRightCloser) {
-		p0 = vec3(texcoord - up, depthDown);
-		p1 = vec3(texcoord + right, depthRight);
+		p0 = vec3(srcPos.xy - up, depthDown);
+		p1 = vec3(srcPos.xy + right, depthRight);
 	} else {
-		p0 = vec3(texcoord - right, depthLeft);
-		p1 = vec3(texcoord - up, depthDown);
+		p0 = vec3(srcPos.xy - right, depthLeft);
+		p1 = vec3(srcPos.xy - up, depthDown);
 	}
 
-	return -normalize(cross(ReconstructPosition(p1.z, p1.xy) - center, ReconstructPosition(p0.z, p0.xy)  - center));
+	return -normalize(cross(ReconstructViewPos(p1) - viewPos, ReconstructViewPos(p0)  - viewPos));
 }
 
 void main() {
-    const vec2 texcoord = VS_Output.m_Texcoord;
+	const vec2 texcoord = VS_Output.m_Texcoord;
 	const float depth = textureLod(g_DepthTexture, texcoord, 0).r;
-	const vec3 center = ReconstructPosition(depth, texcoord);
-	const vec3 v = normalize(-center);
-	const vec3 normal = ReconstructNormal(texcoord, depth, center);
-	const float radius = min(g_Radius / abs(center.z), g_Radius);
+	const vec3 viewPos = ReconstructViewPos(vec3(texcoord, depth));
+	const vec3 viewDir = normalize(-viewPos);
 
+	const vec3 normal = ReconstructNormal(vec3(texcoord, depth), viewPos);
+	const float radius = g_Radius / abs(viewPos.z);
 	const ivec2 xy = ivec2(gl_FragCoord);
-	const float radAngle = g_Rotation + (1.f / 16.f) * ((((xy.x + xy.y) & 3) << 2) + (xy.x & 3)) * M_PI * 2.f;
+	const float rotationNoise = 1.f / 16.f * ((((xy.x + xy.y) & 3) << 2) + (xy.x & 3));
+	const float angle = g_Rotation + rotationNoise * M_PI * 2.f;
 
-	const vec3 direction = vec3(cos(radAngle), sin(radAngle), 0);
-	const vec3 orthoDirection = direction - dot(direction, v) * v;
-	const vec3 axis = cross(direction, v);
-	const vec3 projectedNormal = normal - dot(normal, axis) * axis;
+	const vec3 aoDir = vec3(cos(angle), sin(angle), 0.f);
+	const float sampleSize = radius * 1.f / g_NumSamples;
+	// const float offsetNoise = 1.f / 4.f * ((((xy.x + xy.y) & 3) << 2) + (xy.x & 3));
 
-	const float signN = sign(dot(orthoDirection, projectedNormal));
-	const float cosN = clamp(dot(projectedNormal, v) / length(projectedNormal), 0, 1);
-	const float n = signN * acos(cosN);
+	float currentSampleSize = sampleSize;
+	vec2 horizons = vec2(-1.f);
 
-	const int kNumDirectionSamples = 6;
-	const float stepSize = radius / kNumDirectionSamples;
-	float ao = 0;
+	// calculate horizon angles	
+	for (uint i = 0; i < g_NumSamples; i++) {
+		vec2 offset = aoDir.xy * currentSampleSize;
 
-	for (int side = 0; side < 2; side++) {
-		float horizonCos = -1.f;
-		vec2 offset = (-1.f + 2.f * side) * direction.xy * 0.25f * ((xy.y - xy.x) & 3) * g_ScreenSizeInv;
+		for (uint j = 0; j < 2; j++) {			
+			// const float level = ceil(log2(max(offset.x * gl_FragCoord.x, offset.y * gl_FragCoord.y)));
+			const float depth = textureLod(g_DepthTexture, texcoord + offset, 1).r;
+			const vec3 sampleViewPos = ReconstructViewPos(vec3(texcoord + offset, depth));
+			const vec3 dir = sampleViewPos - viewPos;
+			const float dist = length(dir);
+			const float dist2 = dist * dist;
+			const float cosh = dot(dir, viewDir) / dist;
+			const float falloff = 2.f * (dist2 - g_FalloffNear) / (g_FalloffFar - g_FalloffNear);
 
-		for (int i = 0; i < kNumDirectionSamples; i++) {
-			offset += (-1.f + 2.f * side) * direction.xy * (stepSize);
-
-			const float lod = floor(log2(max(texcoord.x + offset.x, texcoord.y + offset.y) * 0.5f));
-			const float depth = textureLod(g_DepthTexture, texcoord + offset, lod).r;
-			const vec3 samplePos = ReconstructPosition(depth, texcoord + offset);
-			const vec3 horizonPos = samplePos - center;
-			const float horizonLength = length(horizonPos);
-            
-			if (horizonLength < 56.89 / 4.f) {
-				horizonCos = max(horizonCos, dot(horizonPos, v) / horizonLength);
-            }
+			horizons[j] = max(horizons[j], cosh - falloff);
+			offset *= -1.f;
 		}
-		const float radHorizon = n + clamp((-1.f + 2.f * side) * acos(horizonCos) - n, -M_PI * 0.5f, M_PI * 0.5f);
 
-		ao += length(projectedNormal) * 0.25 * (cosN + 2.f * radHorizon * sin(n) - cos(2.f * radHorizon -n));
+		currentSampleSize += sampleSize;
 	}
+
+	horizons = acos(horizons);
+
+	// calculate gamma angle
+	const vec3 bitangent = normalize(cross(aoDir, viewDir));
+	const vec3 tangent = cross(viewDir, bitangent);
+	const vec3 nx = normal - bitangent * dot(normal, bitangent);
+	const float nnx = length(nx);
+	const float invnnx = 1.f / (nnx + 0.000001f);
+	const float cosxi = dot(nx, tangent) * invnnx;
+	const float gamma = acos(cosxi) - M_PI * 0.5f;
+	const float cosgamma = dot(nx, viewDir) * invnnx;
+	const float singamma2 = -2.f * cosxi;
+
+	// clamp to normal hemisphere
+	horizons.x = gamma + max(-horizons.x - gamma, M_PI * -0.5f);
+	horizons.y = gamma + min( horizons.y - gamma, M_PI *  0.5f);
+
+	// Riemann integral is additive
+	float ao = 0.f;
+	ao += horizons.x * singamma2 + cosgamma - cos(2.f * horizons.x - gamma);
+	ao += horizons.y * singamma2 + cosgamma - cos(2.f * horizons.y - gamma);
+	ao *= nnx * 0.25f;
 
 	outColor = ao;
 }

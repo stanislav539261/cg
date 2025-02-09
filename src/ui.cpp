@@ -60,6 +60,34 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
             ImGui::SliderFloat("Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
             ImGui::SliderFloat("Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
 
+            auto i = 0u;
+
+            for (; i < g_LightPoints.size(); i++) {
+                const auto lightPointName = std::string("LightPoint ") + std::to_string(i);
+
+                ImGui::SeparatorText(lightPointName.c_str());
+
+                auto &lightPoint = g_LightPoints[i];
+
+                const auto positonName = std::string("Position##LightPoint") + std::to_string(i);
+                const auto baseColorName = std::string("Base color##LightPoint") + std::to_string(i);
+                const auto radiusName = std::string("Radius##LightPoint") + std::to_string(i);
+
+                ImGui::DragFloat3(positonName.c_str(), reinterpret_cast<float *>(&lightPoint->m_Position));
+                ImGui::SliderFloat3(baseColorName.c_str(), reinterpret_cast<float *>(&lightPoint->m_BaseColor), 0.f, 1.f);
+                ImGui::DragFloat(radiusName.c_str(), reinterpret_cast<float *>(&lightPoint->m_Radius));
+            }
+
+            const auto lastLightPointName = std::string("LightPoint ") + std::to_string(i);
+
+            ImGui::SeparatorText(lastLightPointName.c_str());
+            
+            if (ImGui::Button("Add source")) {
+                const auto lightPoint = std::make_shared<LightPoint>(g_Camera->m_Position, glm::vec3(1.f), 800.f);
+
+                g_LightPoints.push_back(lightPoint);
+            };
+
             ImGui::End();
         } else {
             io.MouseDrawCursor = false;

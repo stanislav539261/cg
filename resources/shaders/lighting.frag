@@ -11,6 +11,14 @@ struct LightEnvironment {
     float m_Padding2;
 };
 
+struct LightPoint {
+    mat4  m_ViewProjections[6];
+    vec3  m_Position;
+    float m_Radius;
+    vec3  m_BaseColor;
+    float m_Padding0;
+};
+
 struct Material {
     uint m_DiffuseMap;
     uint m_MetalnessMap;
@@ -37,7 +45,11 @@ layout(std430, binding = 2) readonly buffer LightEnvironmentBuffer {
     LightEnvironment g_LightEnvironment;
 };
 
-layout(std430, binding = 3) readonly buffer MaterialBuffer {
+layout(std430, binding = 3) readonly buffer LightPointBuffer {
+    LightPoint g_LightPoints[];
+};
+
+layout(std430, binding = 4) readonly buffer MaterialBuffer {
     Material g_Materials[];
 };
 
@@ -51,7 +63,9 @@ layout(binding = 6) uniform sampler2DArray g_ShadowCsmDepthTextures;
 
 layout(location = 0) uniform bool g_EnableAmbientOcclusion;
 layout(location = 1) uniform bool g_EnableReverseZ;
-layout(location = 2) uniform float g_ShadowSizeInv;
+layout(location = 2) uniform uint g_NumLightPoints;
+layout(location = 3) uniform float g_ShadowCsmSizeInv;
+layout(location = 4) uniform float g_ShadowCubeSizeInv;
 
 in VS_OUT {
     layout(location = 0) smooth vec3 m_FragPos;
@@ -66,7 +80,6 @@ const float M_PI = 3.1415926535897932384626433832795f;
 const uint NUM_CASCADES = 4;
 const mat4 PROJECTOR_BIAS = mat4(0.5f, 0.f, 0.f, 0.f, 0.f, 0.5f, 0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.5f, 0.5f, 0.f, 1.f);
 const float SHADOW_AMOUNT = 0.3f;
-const float SHADOW_BIAS = 0.000008f;
 const vec2 SHADOW_POISSON[] = vec2[16](
     vec2( -0.94201624f, -0.39906216f ),
     vec2( 0.94558609f, -0.76890725f ),
@@ -114,7 +127,7 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
         //     bias *= 1.f / (g_LightEnvironment.m_CascadePlaneDistances[layer] * biasModifier);
         // }
 
-        const float filterRadius = g_ShadowSizeInv * 2.f;
+        const float filterRadius = g_ShadowCsmSizeInv * 2.f;
 
         for (uint i = 0; i < 16; i++) {
             vec2 poisson = SHADOW_POISSON[i];
@@ -226,36 +239,69 @@ vec3 ComputeGtaoMultiBounce(float ao, vec3 albedo) {
 	return max(x, ((x * a + b) * x + c) * x);
 }
 
-void main() {
-    uint material = VS_Output.m_Material;
-    vec2 texcoord = VS_Output.m_Texcoord;
+vec3 ComputeLighting(
+    const vec3 fragPos, 
+    const vec2 texcoord, 
+    const vec3 normal, 
+    const vec3 viewDir, 
+    const vec3 albedo,
+    const float metalness,
+    const float roughness
+) {
+    vec3 lighting = vec3(0.f);
 
-    uint diffuseMap = g_Materials[material].m_DiffuseMap;
-    vec4 diffuseColor = texture(g_DiffuseTextures, vec3(texcoord, diffuseMap));
-    uint metalnessMap = g_Materials[material].m_MetalnessMap;
-    vec4 metalnessColor = texture(g_MetalnessTextures, vec3(texcoord, metalnessMap));
-    uint normalMap = g_Materials[material].m_NormalMap;
-    vec4 normalColor = texture(g_NormalTextures, vec3(texcoord, normalMap));
-    uint roughnessMap = g_Materials[material].m_RoughnessMap;
-    vec4 roughnessColor = texture(g_RoughnessTextures, vec3(texcoord, roughnessMap));
+    const vec3 F0 = mix(vec3(0.04f), albedo, metalness);
 
-    vec3 fragPos = VS_Output.m_FragPos;
-    vec3 viewPos = g_CameraPos - fragPos;
-    vec3 normal = normalize(ComputeCotangentFrame(VS_Output.m_Normal, -viewPos, texcoord) * normalColor.rgb);
-    vec3 lightDir = -g_LightEnvironment.m_Direction;  
-    vec3 viewDir = normalize(viewPos);  
+    // Add direct environment light
+    const vec3 globalLightDir = -g_LightEnvironment.m_Direction;  
+    const vec3 globalLighting = g_LightEnvironment.m_BaseColor * ComputePBR(normal, globalLightDir, viewDir, F0, albedo, metalness, roughness);  
+    lighting += globalLighting * ComputeShadowCsm(fragPos, normal, globalLightDir);
 
-    vec3 F0 = vec3(0.04f); 
-    F0 = mix(F0, diffuseColor.rgb, metalnessColor.r);   
+    // Add local lights
+    for (uint i = 0; i < g_NumLightPoints; i++) {
+        const vec3 lightPos = g_LightPoints[i].m_Position - fragPos;
+        const float lightLength = length(lightPos);
+        const float lightDist = lightLength / g_LightPoints[i].m_Radius;
 
-    vec2 NDCSpaceFragPos = vec2(gl_FragCoord.x * 1.f / 1600.f, gl_FragCoord.y * 1.f / 900.f) / gl_FragCoord.w;
-    vec2 textureLookupPos = NDCSpaceFragPos * 0.5f + 0.5f;
+        if (lightDist < 1.f) {
+            const vec3 lightDir = lightPos * 1.f / lightLength;
+            const float lightDist2 = lightDist * lightDist;
+            const float lightDist2Rev = 1.f - lightDist2;
+            const float lightDist2Rev2 = lightDist2Rev * lightDist2Rev;
+            const float lightAttenuation = lightDist2Rev2 * 1.f / (1.f + lightDist);
 
-    vec3 ambientLighting = g_LightEnvironment.m_AmbientColor * diffuseColor.rgb;
-    vec3 pbrLighting = g_LightEnvironment.m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, diffuseColor.rgb, metalnessColor.r, roughnessColor.r);  
-    vec3 sumLighting = ambientLighting + pbrLighting * ComputeShadowCsm(fragPos, normal, lightDir);
+            const vec3 localLighting = g_LightPoints[i].m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, albedo, metalness, roughness);  
+            lighting += localLighting * lightAttenuation;
+        }
+    }
+
+    // Add ambient environment light
+    lighting += g_LightEnvironment.m_AmbientColor * albedo;
     
-    vec3 aoFactor = g_EnableAmbientOcclusion ? ComputeGtaoMultiBounce(texelFetch(g_AmbientOcclusionTexture, ivec2(gl_FragCoord.xy), 0).r, sumLighting) : vec3(1.f);
+    const vec3 aoFactor = g_EnableAmbientOcclusion ? ComputeGtaoMultiBounce(texelFetch(g_AmbientOcclusionTexture, ivec2(gl_FragCoord.xy), 0).r, lighting) : vec3(1.f);
 
-    outColor = vec4(sumLighting * aoFactor, 1.f);
+    return lighting * aoFactor;
+}
+
+void main() {
+    const uint material = VS_Output.m_Material;
+    const vec2 texcoord = VS_Output.m_Texcoord;
+
+    const uint diffuseMap = g_Materials[material].m_DiffuseMap;
+    const vec4 diffuseColor = texture(g_DiffuseTextures, vec3(texcoord, diffuseMap));
+    const uint metalnessMap = g_Materials[material].m_MetalnessMap;
+    const vec4 metalnessColor = texture(g_MetalnessTextures, vec3(texcoord, metalnessMap));
+    const uint normalMap = g_Materials[material].m_NormalMap;
+    const vec4 normalColor = texture(g_NormalTextures, vec3(texcoord, normalMap));
+    const uint roughnessMap = g_Materials[material].m_RoughnessMap;
+    const vec4 roughnessColor = texture(g_RoughnessTextures, vec3(texcoord, roughnessMap));
+
+    const vec3 fragPos = VS_Output.m_FragPos;
+    const vec3 viewPos = g_CameraPos - fragPos;
+    const vec3 normal = normalize(ComputeCotangentFrame(VS_Output.m_Normal, -viewPos, texcoord) * normalColor.rgb);
+    const vec3 viewDir = normalize(viewPos);
+
+    vec3 lighting = vec3(0.f);
+
+    outColor = vec4(ComputeLighting(fragPos, texcoord, normal, viewDir, diffuseColor.rgb, metalnessColor.r, roughnessColor.r), 1.f);
 }

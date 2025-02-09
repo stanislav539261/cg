@@ -19,7 +19,7 @@ layout(std430, binding = 1) readonly buffer IndexBuffer {
     uint g_Indices[];
 };
 
-layout(std430, binding = 4) readonly buffer VertexBuffer {
+layout(std430, binding = 5) readonly buffer VertexBuffer {
     float g_Vertices[][9];
 };
 

@@ -14,7 +14,9 @@ constexpr GLfloat COLOR_ONE[] = { 1.f, 1.f, 1.f, 1.f };
 constexpr GLfloat COLOR_ZERO[] = { 0.f, 0.f, 0.f, 0.f };
 constexpr GLfloat DEPTH_ONE[] = { 1.f };
 constexpr GLfloat DEPTH_ZERO[] = { 0.f };
-constexpr GLuint SHADOW_SIZE = 2048;
+constexpr size_t MAX_NUM_LIGHTPOINTS = 1024;
+constexpr GLuint SHADOW_CSM_SIZE = 2048;
+constexpr GLuint SHADOW_CUBE_SIZE = 1024;
 
 std::shared_ptr<Render> g_Render = nullptr;
 
@@ -185,8 +187,8 @@ Render::Render() {
             auto lastAmbientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
             auto lastDepthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
             auto lightingTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_RGBA16F);
-            auto shadowCsmColorTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_R32F);
-            auto shadowCsmDepthTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_SIZE, SHADOW_SIZE, 5, 1, GL_DEPTH_COMPONENT32F);
+            auto shadowCsmColorTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_CSM_SIZE, SHADOW_CSM_SIZE, 5, 1, GL_R32F);
+            auto shadowCsmDepthTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_CSM_SIZE, SHADOW_CSM_SIZE, 5, 1, GL_DEPTH_COMPONENT32F);
 
             auto depthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
             auto lastDepthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
@@ -382,6 +384,7 @@ void Render::LoadModel(const Model &model) {
     auto drawIndirectBuffer = std::make_shared<DrawIndirectBuffer>(model.m_Meshes.size());
     auto indexBuffer = std::make_shared<Buffer<GpuIndex>>(model.NumIndices());
     auto lightEnvironmentBuffer = std::make_shared<Buffer<GpuLightEnvironment>>();
+    auto lightPointBuffer = std::make_shared<Buffer<GpuLightPoint>>(MAX_NUM_LIGHTPOINTS);
     auto vertexBuffer = std::make_shared<Buffer<GpuVertex>>(model.NumVertices());
 
     auto meshes = std::vector<std::tuple<GLuint, GLuint>>();
@@ -422,6 +425,7 @@ void Render::LoadModel(const Model &model) {
     m_DrawIndirectBuffer = drawIndirectBuffer;
     m_IndexBuffer = indexBuffer;
     m_LightEnvironmentBuffer = lightEnvironmentBuffer;
+    m_LightPointBuffer = lightPointBuffer;
     m_MaterialBuffer = materialBuffer;
     m_Meshes = meshes;
     m_MetalnessTexture2DArray = metalnessTexture2DArray;
@@ -481,6 +485,21 @@ void Render::Update() {
         };
 
         m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
+    }
+
+    if (m_LightPointBuffer) {
+        for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_NUM_LIGHTPOINTS); i++) {
+            const auto &lightPoint = g_LightPoints[i];
+
+            const auto gpuLightPoint = GpuLightPoint {
+                .m_ViewProjections = lightPoint->ViewProjections(m_EnableReverseZ),
+                .m_Position = lightPoint->m_Position,
+                .m_Radius = lightPoint->m_Radius,
+                .m_BaseColor = lightPoint->m_BaseColor,
+            };
+
+            m_LightPointBuffer->SetData(gpuLightPoint, i);
+        }
     }
 
     std::swap(m_AmbientOcclusionTemporalTexture2D, m_LastAmbientOcclusionTemporalTexture2D);
@@ -737,11 +756,14 @@ void Render::LightingPass() {
     if (m_LightEnvironmentBuffer) {
         m_LightEnvironmentBuffer->Bind(2);
     }
+    if (m_LightPointBuffer) {
+        m_LightPointBuffer->Bind(3);
+    }
     if (m_MaterialBuffer) {
-        m_MaterialBuffer->Bind(3);
+        m_MaterialBuffer->Bind(4);
     }
     if (m_VertexBuffer) {
-        m_VertexBuffer->Bind(4);
+        m_VertexBuffer->Bind(5);
     }
 
     assert(m_AmbientOcclusionTemporalTexture2D);
@@ -771,7 +793,9 @@ void Render::LightingPass() {
 
     glUniform1i(0, m_EnableAmbientOcclusion);
     glUniform1i(1, m_EnableReverseZ);
-    glUniform1f(2, 1.f / SHADOW_SIZE);
+    glUniform1ui(2, g_LightPoints.size());
+    glUniform1f(3, 1.f / SHADOW_CSM_SIZE);
+    glUniform1f(4, 1.f / SHADOW_CUBE_SIZE);
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();

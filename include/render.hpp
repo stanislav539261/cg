@@ -41,6 +41,14 @@ struct GpuLightEnvironment {
     float                       m_Padding2;
 };
 
+struct GpuLightPoint {
+    std::array<glm::mat4, 6>    m_ViewProjections;
+    glm::vec3                   m_Position;
+    float                       m_Radius;  
+    glm::vec3                   m_BaseColor;
+    float                       m_Padding0;
+};
+
 struct GpuMaterial {
     GLuint  m_DiffuseMap;
     GLuint  m_MetalnessMap;
@@ -98,6 +106,7 @@ private:
     std::shared_ptr<ShaderProgram>                  m_LastDownsampleDepthFramebuffer;
     std::shared_ptr<Framebuffer>                    m_LastLightingFramebuffer;
     std::shared_ptr<Buffer<GpuLightEnvironment>>    m_LightEnvironmentBuffer;
+    std::shared_ptr<Buffer<GpuLightPoint>>          m_LightPointBuffer;
     std::shared_ptr<Framebuffer>                    m_LightingFramebuffer;
     std::shared_ptr<ShaderProgram>                  m_LightingShaderProgram;
     std::shared_ptr<Texture2D>                      m_LightingTexture2D;

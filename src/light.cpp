@@ -5,6 +5,7 @@
 #include "light.hpp"
 
 std::shared_ptr<LightEnvironment> g_LightEnvironment = nullptr;
+std::vector<std::shared_ptr<LightPoint>> g_LightPoints = {};
 
 LightEnvironment::LightEnvironment(const glm::vec3 &ambientColor, const glm::vec3 &baseColor, float pitch, float yaw) {
     m_AmbientColor = ambientColor;
@@ -17,7 +18,7 @@ LightEnvironment::~LightEnvironment() {
     
 }
 
-std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera &camera, const std::array<float, 4> &levels, bool reversedZ) {
+std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera &camera, const std::array<float, 4> &levels, bool reversedZ) const {
     auto cascades = std::array<glm::mat4, 5>();
 
     const auto computeLightSpaceMatrix = [this, camera, reversedZ](auto near, auto far) {
@@ -104,4 +105,51 @@ glm::vec3 LightEnvironment::Forward() const {
         sin(glm::radians(m_Pitch)),
         sin(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch))
     ));
+}
+
+LightPoint::LightPoint(const glm::vec3 &position, const glm::vec3 &baseColor, float radius) {
+    m_BaseColor = baseColor;
+    m_Position = position;
+    m_Radius = radius;
+}
+
+LightPoint::~LightPoint() {
+    
+}
+
+std::array<glm::mat4, 6> LightPoint::ViewProjections(bool reversedZ) const {
+    const auto projection = glm::perspectiveZO(3.1415926535897932384626433832795f / 2.f, 1.f, 1.f, m_Radius);
+
+    return std::array<glm::mat4, 6> {
+        projection * glm::lookAtRH(
+            m_Position,
+            m_Position + glm::vec3(1.00, 0.00, 0.00),
+            glm::vec3(0.00, -1.0, 0.00)
+        ),
+        projection * glm::lookAtRH(
+            m_Position,
+            m_Position + glm::vec3(-1.0, 0.00, 0.00),
+            glm::vec3(0.00, -1.0, 0.00)
+        ),
+        projection * glm::lookAtRH(
+            m_Position,
+            m_Position + glm::vec3(0.00, 1.00, 0.00),
+            glm::vec3(0.00, 0.00, 1.00)
+        ),
+        projection * glm::lookAtRH(
+            m_Position,
+            m_Position + glm::vec3(0.00, -1.0, 0.00),
+            glm::vec3(0.00, 0.00, -1.0)
+        ),
+        projection * glm::lookAtRH(
+            m_Position,
+            m_Position + glm::vec3(0.00, 0.00, 1.00),
+            glm::vec3(0.00, -1.0, 0.00)
+        ),
+        projection * glm::lookAtRH(
+            m_Position,
+            m_Position + glm::vec3(0.00, 0.00, -1.0),
+            glm::vec3(0.00, -1.0, 0.00)
+        )
+    };
 }

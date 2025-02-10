@@ -278,12 +278,10 @@ Render::Render() {
 
             auto shadowCsmShaderProgram = std::make_shared<ShaderProgram>();
             assert(shadowCsmShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_csm.vert"));
-            assert(shadowCsmShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_csm.geom"));
             assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
 
             auto shadowCubeShaderProgram = std::make_shared<ShaderProgram>();
             assert(shadowCubeShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_cube.vert"));
-            assert(shadowCubeShaderProgram->Link(GL_GEOMETRY_SHADER, g_ResourcePath / "shaders/shadow_cube.geom"));
             assert(shadowCubeShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_cube.frag"));
 
             m_AmbientOcclusionFramebuffer = ambientOcclusionFramebuffer;
@@ -636,21 +634,29 @@ void Render::ShadowCsmPass() {
     m_ShadowCsmFramebuffer->Bind();
     m_ShadowCsmFramebuffer->ClearColor(0, 0.f, 0.f, 0.f, 1.f);
     m_ShadowCsmFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
-
-    if (m_IndexBuffer) {
-        m_IndexBuffer->Bind(0);
-    }
-    if (m_LightEnvironmentBuffer) {
-        m_LightEnvironmentBuffer->Bind(1);
-    }
-    if (m_VertexBuffer) {
-        m_VertexBuffer->Bind(2);
-    }
-
     m_ShadowCsmShaderProgram->Use();
 
-    if (m_DrawIndirectBuffer) {
-        m_DrawIndirectBuffer->Bind();
+    if (!m_DrawIndirectBuffer) {
+        return;
+    }
+    if (!m_IndexBuffer) {
+        return;
+    }
+    if (!m_LightEnvironmentBuffer) {
+        return;
+    }
+    if (!m_VertexBuffer) {
+        return;
+    }
+
+    m_DrawIndirectBuffer->Bind();
+
+    m_IndexBuffer->Bind(0);
+    m_LightEnvironmentBuffer->Bind(1);
+    m_VertexBuffer->Bind(2);
+
+    for (auto i = 0u; i < m_ShadowCsmColorTexture2DArray->m_Depth; i++) {
+        glUniform1ui(0, i);
 
         glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
     }
@@ -673,15 +679,24 @@ void Render::ShadowCubePass() {
     glScissor(0, 0, m_ShadowCubeColorTextureCubeArray->m_Width, m_ShadowCubeColorTextureCubeArray->m_Height);
     glViewport(0, 0, m_ShadowCubeColorTextureCubeArray->m_Width, m_ShadowCubeColorTextureCubeArray->m_Height);
 
-    if (m_IndexBuffer) {
-        m_IndexBuffer->Bind(0);
+    if (!m_DrawIndirectBuffer) {
+        return;
     }
-    if (m_LightPointBuffer) {
-        m_LightPointBuffer->Bind(1);
+    if (!m_IndexBuffer) {
+        return;
     }
-    if (m_VertexBuffer) {
-        m_VertexBuffer->Bind(2);
+    if (!m_LightPointBuffer) {
+        return;
     }
+    if (!m_VertexBuffer) {
+        return;
+    }
+
+    m_DrawIndirectBuffer->Bind();
+
+    m_IndexBuffer->Bind(0);
+    m_LightPointBuffer->Bind(1);
+    m_VertexBuffer->Bind(2);
 
     for (auto i = 0u; i < m_ShadowCubeColorTextureViewCubes.size(); i++) {
         m_ShadowCubeFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCubeColorTextureViewCubes.at(i));
@@ -689,10 +704,10 @@ void Render::ShadowCubePass() {
         m_ShadowCubeFramebuffer->ClearColor(0, 1.f, 1.f, 1.f, 1.f);
         m_ShadowCubeFramebuffer->ClearDepth(0, 1.f);
 
-        glUniform1ui(0, i);
+        glUniform1ui(1, i);
 
-        if (m_DrawIndirectBuffer) {
-            m_DrawIndirectBuffer->Bind();
+        for (auto j = 0u; j < 6; j++) {
+            glUniform1ui(0, j);
 
             glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
         }

@@ -69,6 +69,7 @@ public:
     SDL_GLContext                                   m_Context;
     bool                                            m_EnableAmbientOcclusion;
     bool                                            m_EnableReverseZ;
+    bool                                            m_EnableWireframeMode;
     float                                           m_ShadowCsmFilterRadius;
     float                                           m_ShadowCubeFilterRadius;
 

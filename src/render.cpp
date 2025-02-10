@@ -133,6 +133,7 @@ Render::Render() {
 
             m_EnableAmbientOcclusion = true;
             m_EnableReverseZ = true;
+            m_EnableWireframeMode = false;
             m_NumFrames = 0;
 
             // Create buffers
@@ -660,7 +661,7 @@ void Render::DepthPass() {
     glCullFace(GL_BACK);
     glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
     glDepthMask(true);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glPolygonMode(GL_FRONT_AND_BACK, m_EnableWireframeMode ? GL_LINE : GL_FILL);
     glFrontFace(GL_CCW);
 
     glScissor(0, 0, m_DepthTexture2D->m_Width, m_DepthTexture2D->m_Height);
@@ -828,7 +829,7 @@ void Render::LightingPass() {
     glCullFace(GL_BACK);
     glDepthFunc(GL_EQUAL);
     glDepthMask(false);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glPolygonMode(GL_FRONT_AND_BACK, m_EnableWireframeMode ? GL_LINE : GL_FILL);
     glFrontFace(GL_CCW);
 
     glScissor(0, 0, m_LightingTexture2D->m_Width, m_LightingTexture2D->m_Height);

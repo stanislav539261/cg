@@ -281,7 +281,7 @@ vec3 ComputePBR(vec3 normal, vec3 lightDir, vec3 viewDir, vec3 F0, vec3 albedo, 
     return (diffuseBRDF + specularBRDF) * cosLi;
 }
 
-mat3 ComputeCotangentFrame(vec3 normal, vec3 p, vec2 uv) {
+mat3 ComputeTBN(vec3 normal, vec3 p, vec2 uv) {
     vec3 dp1 = dFdx(p);
     vec3 dp2 = dFdy(p);
     vec2 duv1 = dFdx(uv);
@@ -376,7 +376,7 @@ void main() {
 
     const vec3 fragPos = VS_Output.m_FragPos;
     const vec3 viewPos = g_CameraPos - fragPos;
-    const vec3 normal = normalize(ComputeCotangentFrame(VS_Output.m_Normal, -viewPos, texcoord) * normalColor.rgb);
+    const vec3 normal = normalize(ComputeTBN(VS_Output.m_Normal, -viewPos, texcoord) * (normalColor.rgb * 2.f - 1.f));
     const vec3 viewDir = normalize(viewPos);
 
     vec3 lighting = vec3(0.f);

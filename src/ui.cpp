@@ -51,6 +51,11 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
 
             ImGui::Begin("Menu");
 
+            const auto framerate = std::to_string(io.Framerate);
+
+            ImGui::Text("FPS: %s", framerate.c_str());
+            ImGui::Spacing();
+
             // Global
             ImGui::Checkbox("Enable Ambient Occlusion", &g_Render->m_EnableAmbientOcclusion);
             ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);

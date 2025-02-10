@@ -113,6 +113,8 @@ Render::Render() {
 
         m_Context = SDL_GL_CreateContext(g_Window->m_Window);
     }
+    
+    SDL_GL_SetSwapInterval(0);
 
     if (m_Context) {
         auto result = glewInit();

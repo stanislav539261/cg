@@ -520,7 +520,7 @@ void Render::Update() {
         const auto layers = std::max(g_LightPoints.size() * 6lu, 6lu);
         const auto size = SHADOW_CUBE_SIZE;
 
-        m_ShadowCubeColorTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_R32F);
+        m_ShadowCubeColorTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_R16);
         m_ShadowCubeColorTextureViewCubes.clear();
     
         while (m_ShadowCubeColorTextureViewCubes.size() < g_LightPoints.size()) {
@@ -539,7 +539,7 @@ void Render::Update() {
         const auto layers = std::max(g_LightPoints.size() * 6lu, 6lu);
         const auto size = SHADOW_CUBE_SIZE;
 
-        m_ShadowCubeDepthTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_DEPTH_COMPONENT32F);
+        m_ShadowCubeDepthTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_DEPTH_COMPONENT16);
         m_ShadowCubeDepthTextureViewCubes.clear();
 
         while (m_ShadowCubeDepthTextureViewCubes.size() < g_LightPoints.size()) {

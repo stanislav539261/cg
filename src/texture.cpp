@@ -186,6 +186,7 @@ TextureCubeArray::TextureCubeArray(GLuint width, GLuint height, GLuint depth, GL
     glCreateTextures(m_Target, 1, &m_Handle);
     glTextureStorage3D(m_Handle, mipLevel, format, width, height, depth);
 
+    m_Depth = depth;
     m_Format = format;
     m_Height = height;
     m_MipLevel = mipLevel;

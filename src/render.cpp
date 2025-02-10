@@ -135,6 +135,8 @@ Render::Render() {
             m_EnableReverseZ = true;
             m_EnableWireframeMode = false;
             m_NumFrames = 0;
+            m_ShadowCsmVarianceMax = 0.00008f;
+            m_ShadowCubeVarianceMax = 0.00008f;
 
             // Create buffers
             auto cameraBuffer = std::make_shared<Buffer<GpuCamera>>();
@@ -896,7 +898,9 @@ void Render::LightingPass() {
     glUniform1i(1, m_EnableReverseZ);
     glUniform1ui(2, g_LightPoints.size());
     glUniform1f(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
-    glUniform1f(4, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
+    glUniform1f(4, m_ShadowCsmVarianceMax);
+    glUniform1f(5, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
+    glUniform1f(6, m_ShadowCubeVarianceMax);
 
     if (m_DrawIndirectBuffer) {
         m_DrawIndirectBuffer->Bind();

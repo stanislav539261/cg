@@ -94,8 +94,10 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
 
             // Shadows
             ImGui::SeparatorText("Shadows");
-            ImGui::SliderFloat("CSM filter radius", &g_Render->m_ShadowCsmFilterRadius, 0.f, 16.f);
-            ImGui::SliderFloat("Cube filter radius", &g_Render->m_ShadowCubeFilterRadius, 0.f, 16.f);
+            ImGui::SliderFloat("CSM filter radius", &g_Render->m_ShadowCsmFilterRadius, 0.f, 16.f, "%.1f");
+            ImGui::SliderFloat("CSM variance max", &g_Render->m_ShadowCsmVarianceMax, 0.f, 0.0001f, "%.8f");
+            ImGui::SliderFloat("Cube filter radius", &g_Render->m_ShadowCubeFilterRadius, 0.f, 16.f, "%.1f");
+            ImGui::SliderFloat("Cube variance max", &g_Render->m_ShadowCubeVarianceMax, 0.f, 0.0001f, "%.8f");
 
             ImGui::End();
         } else {

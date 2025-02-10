@@ -67,7 +67,9 @@ layout(location = 0) uniform bool g_EnableAmbientOcclusion;
 layout(location = 1) uniform bool g_EnableReverseZ;
 layout(location = 2) uniform uint g_NumLightPoints;
 layout(location = 3) uniform float g_ShadowCsmFilterRadius;
-layout(location = 4) uniform float g_ShadowCubeFilterRadius;
+layout(location = 4) uniform float g_ShadowCsmVarianceMax;
+layout(location = 5) uniform float g_ShadowCubeFilterRadius;
+layout(location = 6) uniform float g_ShadowCubeVarianceMax;
 
 in VS_OUT {
     layout(location = 0) smooth vec3 m_FragPos;
@@ -139,7 +141,7 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
                 if (projCoords.z > momentX) {
                     shadow += 1.f;
                 } else {
-                    float variance = min(momentY - (momentX * momentX), 1.f - 0.000002f);
+                    float variance = min(momentY - (momentX * momentX), 1.f - g_ShadowCsmVarianceMax);
                     float p = step(projCoords.z, momentX);
                     float distX = projCoords.z - momentX;
                     float pMin = variance / (variance + distX * distX);
@@ -150,7 +152,7 @@ float ComputeShadowCsm(const vec3 fragPos, const vec3 normal, const vec3 lightDi
                 if (projCoords.z < momentX) {
                     shadow += 1.f;
                 } else {
-                    float variance = max(momentY - (momentX * momentX), 0.000002f);
+                    float variance = max(momentY - (momentX * momentX), g_ShadowCsmVarianceMax);
                     float p = step(projCoords.z, momentX);
                     float distX = projCoords.z - momentX;
                     float pMax = variance / (variance + distX * distX);
@@ -197,7 +199,7 @@ float ComputeShadowCube(const vec3 lightDir, const float lightZ, const uint laye
 
         const float momentX = texture(g_ShadowCubeDepthTextures, texcoord).r;
         const float momentY = texture(g_ShadowCubeColorTextures, texcoord).r;
-        const float variance = max(momentY - (momentX * momentX), 0.000002f);
+        const float variance = max(momentY - (momentX * momentX), g_ShadowCubeVarianceMax);
         const float penumbra = step(lightZ, momentX);
         const float distX = lightZ - momentX;
         const float penumbraMax = variance / (variance + distX * distX);
@@ -293,7 +295,7 @@ vec3 ComputeLighting(
     const vec3 F0 = mix(vec3(0.04f), albedo, metalness);
 
     // Add direct environment light
-    const vec3 globalLightDir = -g_LightEnvironment.m_Direction;  
+    const vec3 globalLightDir = -g_LightEnvironment.m_Direction;
     const vec3 globalLighting = g_LightEnvironment.m_BaseColor * ComputePBR(normal, globalLightDir, viewDir, F0, albedo, metalness, roughness);  
     lighting += globalLighting * ComputeShadowCsm(fragPos, normal, globalLightDir);
 

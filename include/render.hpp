@@ -71,7 +71,9 @@ public:
     bool                                            m_EnableReverseZ;
     bool                                            m_EnableWireframeMode;
     float                                           m_ShadowCsmFilterRadius;
+    float                                           m_ShadowCsmVarianceMax;
     float                                           m_ShadowCubeFilterRadius;
+    float                                           m_ShadowCubeVarianceMax;
 
 private:
     void                                            ShadowCsmPass();

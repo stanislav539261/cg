@@ -14,18 +14,31 @@
 #include "texture.hpp"
 
 struct GpuCamera {
-    glm::mat4   m_LastProjection;
-    glm::mat4   m_LastProjectionInversed;
     glm::mat4   m_LastView;
     glm::mat4   m_Projection;
     glm::mat4   m_ProjectionInversed;
+    glm::mat4   m_ProjectionNonReversed;
+    glm::mat4   m_ProjectionNonReversedInversed;
     glm::mat4   m_View;
     glm::vec3   m_Position;
     float       m_Padding0;
+    glm::vec2   m_NormTileDim;
+    glm::vec2   m_TileSizeInv;
     float       m_FarZ;
     float       m_NearZ;
     float       m_FovX;
     float       m_FovY;
+    float       m_SliceBiasFactor;
+    float       m_SliceScalingFactor;
+    float       m_Padding1;
+    float       m_Padding2;
+};
+
+struct GpuCluster {
+    glm::vec3   m_BoundsMax;
+    float       m_Padding0;
+    glm::mat4   m_BoundsMin;
+    float       m_Padding1;
 };
 
 typedef unsigned int GpuIndex;
@@ -39,6 +52,13 @@ struct GpuLightEnvironment {
     float                       m_Padding1;  
     glm::vec3                   m_Direction;
     float                       m_Padding2;
+};
+
+struct GpuLightGrid {
+    unsigned int    m_Count;
+    unsigned int    m_Offset;
+    float           m_Padding0;
+    float           m_Padding1;
 };
 
 struct GpuLightPoint {
@@ -83,6 +103,8 @@ private:
     void                                            AmbientOcclusionPass();
     void                                            AmbientOcclusionSpartialPass();
     void                                            AmbientOcclusionTemporalPass();
+    void                                            ClusterPass();
+    void                                            LightCullingPass();
     void                                            LightingPass();
     void                                            ScreenPass();
     
@@ -96,6 +118,8 @@ private:
     std::shared_ptr<ShaderProgram>                  m_AmbientOcclusionTemporalShaderProgram;
     std::shared_ptr<Texture2D>                      m_AmbientOcclusionTemporalTexture2D;
     std::shared_ptr<Buffer<GpuCamera>>              m_CameraBuffer;
+    std::shared_ptr<Buffer<GpuCluster>>             m_ClusterBuffer;
+    std::shared_ptr<ShaderProgram>                  m_ClusterShaderProgram;
     std::shared_ptr<Framebuffer>                    m_DepthFramebuffer;
     std::shared_ptr<ShaderProgram>                  m_DepthShaderProgram;
     std::shared_ptr<Texture2D>                      m_DepthTexture2D;
@@ -111,7 +135,11 @@ private:
     std::vector<std::shared_ptr<TextureView2D>>     m_LastDepthTextureView2Ds;
     std::shared_ptr<ShaderProgram>                  m_LastDownsampleDepthFramebuffer;
     std::shared_ptr<Framebuffer>                    m_LastLightingFramebuffer;
+    std::shared_ptr<Buffer<unsigned int>>           m_LightCounterBuffer;
+    std::shared_ptr<ShaderProgram>                  m_LightCullingShaderProgram;
     std::shared_ptr<Buffer<GpuLightEnvironment>>    m_LightEnvironmentBuffer;
+    std::shared_ptr<Buffer<GpuLightGrid>>           m_LightGridBuffer;
+    std::shared_ptr<Buffer<unsigned int>>           m_LightIndexBuffer;
     std::shared_ptr<Buffer<GpuLightPoint>>          m_LightPointBuffer;
     std::shared_ptr<Framebuffer>                    m_LightingFramebuffer;
     std::shared_ptr<ShaderProgram>                  m_LightingShaderProgram;

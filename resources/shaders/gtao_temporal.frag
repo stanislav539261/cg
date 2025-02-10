@@ -1,18 +1,24 @@
 #version 460 core
 
 layout(std430, binding = 0) readonly buffer CameraBuffer {
-    mat4  g_LastProjection;
-    mat4  g_LastProjectionInversed;
     mat4  g_LastView;
     mat4  g_Projection;
     mat4  g_ProjectionInversed;
+    mat4  g_ProjectionNonReversed;
+    mat4  g_ProjectionNonReversedInversed;
     mat4  g_View;
     vec3  g_CameraPos;
     float m_Padding0;
+    vec2  g_NormTileDim;
+    vec2  g_TileSizeInv;
     float g_FarZ;
     float g_NearZ;
     float g_FovX;
     float g_FovY;
+    float g_SliceBiasFactor;
+    float g_SliceScalingFactor;
+    float m_Padding1;
+    float m_Padding2;
 };
 
 layout(binding = 0) uniform sampler2D g_AmbientOcclusionSpartialTexture;

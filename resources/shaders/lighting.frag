@@ -1,5 +1,9 @@
 #version 460 core
 
+#define GRID_SIZE_X 16
+#define GRID_SIZE_Y 8
+#define GRID_SIZE_Z 24
+
 struct LightEnvironment {
     mat4  m_CascadeViewProjections[5];
     vec4  m_CascadePlaneDistances;
@@ -9,6 +13,13 @@ struct LightEnvironment {
     float m_Padding1;
     vec3  m_Direction;
     float m_Padding2;
+};
+
+struct LightGrid {
+    uint  m_Count;
+    uint  m_Offset;
+    float m_Padding0;
+    float m_Padding1;
 };
 
 struct LightPoint {
@@ -27,29 +38,43 @@ struct Material {
 };
 
 layout(std430, binding = 0) readonly buffer CameraBuffer {
-    mat4  g_LastProjection;
-    mat4  g_LastProjectionInversed;
     mat4  g_LastView;
     mat4  g_Projection;
     mat4  g_ProjectionInversed;
+    mat4  g_ProjectionNonReversed;
+    mat4  g_ProjectionNonReversedInversed;
     mat4  g_View;
     vec3  g_CameraPos;
     float m_Padding0;
+    vec2  g_NormTileDim;
+    vec2  g_TileSizeInv;
     float g_FarZ;
     float g_NearZ;
     float g_FovX;
     float g_FovY;
+    float g_SliceBiasFactor;
+    float g_SliceScalingFactor;
+    float m_Padding1;
+    float m_Padding2;
 };
 
 layout(std430, binding = 2) readonly buffer LightEnvironmentBuffer {
     LightEnvironment g_LightEnvironment;
 };
 
-layout(std430, binding = 3) readonly buffer LightPointBuffer {
+layout(std430, binding = 3) readonly buffer LightGridBuffer {
+    LightGrid g_LightGrids[];
+};
+
+layout(std430, binding = 4) readonly buffer LightIndexBuffer {
+    uint g_LightIndices[];
+};
+
+layout(std430, binding = 5) readonly buffer LightPointBuffer {
     LightPoint g_LightPoints[];
 };
 
-layout(std430, binding = 4) readonly buffer MaterialBuffer {
+layout(std430, binding = 6) readonly buffer MaterialBuffer {
     Material g_Materials[];
 };
 
@@ -281,6 +306,10 @@ vec3 ComputeGtaoMultiBounce(float ao, vec3 albedo) {
 	return max(x, ((x * a + b) * x + c) * x);
 }
 
+float LinearizeZ(const float depth, const float near, const float far) {
+	return near * far / (depth * (near - far) + far);
+}
+
 vec3 ComputeLighting(
     const vec3 fragPos, 
     const vec2 texcoord, 
@@ -300,10 +329,17 @@ vec3 ComputeLighting(
     lighting += globalLighting * ComputeShadowCsm(fragPos, normal, globalLightDir);
 
     // Add local lights
-    for (uint i = 0; i < g_NumLightPoints; i++) {
-        const vec3 lightPos = g_LightPoints[i].m_Position - fragPos;
+    const float z = g_EnableReverseZ ? LinearizeZ(gl_FragCoord.z, g_FarZ, g_NearZ) : LinearizeZ(gl_FragCoord.z, g_NearZ, g_FarZ);
+    const uint slice = uint(log2(z) * g_SliceScalingFactor + g_SliceBiasFactor);
+    const uvec3 tile3 = uvec3(uvec2(gl_FragCoord.xy * g_TileSizeInv), slice);
+    const uint tile = tile3.x + GRID_SIZE_X * tile3.y + GRID_SIZE_X * GRID_SIZE_Y * tile3.z;
+    const uint offset = g_LightGrids[tile].m_Offset;
+
+    for (uint i = 0; i < g_LightGrids[tile].m_Count; i++) {
+        const uint lightIndex = g_LightIndices[offset + i];
+        const vec3 lightPos = g_LightPoints[lightIndex].m_Position - fragPos;
         const float lightLength = length(lightPos);
-        const float lightDist = lightLength / g_LightPoints[i].m_Radius;
+        const float lightDist = lightLength / g_LightPoints[lightIndex].m_Radius;
 
         if (lightDist < 1.f) {
             const vec3 lightDir = lightPos * 1.f / lightLength;
@@ -312,8 +348,8 @@ vec3 ComputeLighting(
             const float lightDist2Rev2 = lightDist2Rev * lightDist2Rev;
             const float lightAttenuation = lightDist2Rev2 * 1.f / (1.f + lightDist);
 
-            const vec3 localLighting = g_LightPoints[i].m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, albedo, metalness, roughness);  
-            lighting += localLighting * lightAttenuation * ComputeShadowCube(-lightDir, lightDist, i);
+            const vec3 localLighting = g_LightPoints[lightIndex].m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, albedo, metalness, roughness);  
+            lighting += localLighting * lightAttenuation * ComputeShadowCube(-lightDir, lightDist, lightIndex);
         }
     }
 

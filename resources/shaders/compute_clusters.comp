@@ -1,0 +1,79 @@
+#version 460 core
+
+#define GRID_SIZE_X 16
+#define GRID_SIZE_Y 8
+#define GRID_SIZE_Z 24
+
+struct Cluster {
+    vec3  m_BoundsMax;
+    float m_Padding0;
+    vec3  m_BoundsMin;
+    float m_Padding1;
+};
+
+layout(std430, binding = 0) readonly buffer CameraBuffer {
+    mat4  g_LastView;
+    mat4  g_Projection;
+    mat4  g_ProjectionInversed;
+    mat4  g_ProjectionNonReversed;
+    mat4  g_ProjectionNonReversedInversed;
+    mat4  g_View;
+    vec3  g_CameraPos;
+    float m_Padding0;
+    vec2  g_NormTileDim;
+    vec2  g_TileSizeInv;
+    float g_FarZ;
+    float g_NearZ;
+    float g_FovX;
+    float g_FovY;
+    float g_SliceBiasFactor;
+    float g_SliceScalingFactor;
+    float m_Padding1;
+    float m_Padding2;
+};
+
+layout(std430, binding = 1) writeonly buffer ClusterBuffer {
+    Cluster g_Clusters[GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z];
+};
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+vec3 RayIntersectZPlane(const vec3 incident, const float zOffset) {
+	return incident * zOffset / incident.z;
+}
+
+vec3 ScreenToView(const vec4 screen) {
+    const vec4 clip = vec4(vec2(screen.x * 2.f - 1.f, screen.y * 2.f - 1.f), screen.zw);
+    const vec4 view = g_ProjectionNonReversedInversed * clip;
+
+    return view.xyz / view.w;
+}
+
+void main() {
+    // Calculating the min and max point in screen space
+    const vec4 bottomLeftSS = vec4((gl_WorkGroupID.xy + vec2(0.f)) * g_NormTileDim, 0.f, 1.f);
+    const vec4 topRightSS = vec4((gl_WorkGroupID.xy + vec2(1.f)) * g_NormTileDim, 0.f, 1.f);
+
+    // Pass min and max to view space
+    const vec3 bottomLeftVS = ScreenToView(bottomLeftSS);
+    const vec3 topRightVS = ScreenToView(topRightSS);
+
+    // Near and far values of the cluster in view space
+    const float tileNearZ = -g_NearZ * pow(g_FarZ / g_NearZ, float(gl_WorkGroupID.z + 0) * 1.f / GRID_SIZE_Z);
+    const float tileFarZ = -g_NearZ * pow(g_FarZ / g_NearZ, float(gl_WorkGroupID.z + 1) * 1.f / GRID_SIZE_Z);
+
+    // Finding the 4 intersection points made from the maxPoint to the cluster near/far plane
+    const vec3 bottomLeftFront = RayIntersectZPlane(bottomLeftVS, tileNearZ);
+    const vec3 bottomLeftBack = RayIntersectZPlane(bottomLeftVS, tileFarZ);
+    const vec3 topRightFront = RayIntersectZPlane(topRightVS, tileNearZ);
+    const vec3 topRightBack = RayIntersectZPlane(topRightVS, tileFarZ);
+    const vec3 maxPointAABB = max(max(bottomLeftFront, bottomLeftBack), max(topRightFront, topRightBack));
+    const vec3 minPointAABB = min(min(bottomLeftFront, bottomLeftBack), min(topRightFront, topRightBack));
+
+    const uint tile = gl_WorkGroupID.x
+        + gl_WorkGroupID.y * gl_NumWorkGroups.x
+        + gl_WorkGroupID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y;
+
+    g_Clusters[tile].m_BoundsMax = maxPointAABB;
+    g_Clusters[tile].m_BoundsMin = minPointAABB;
+}

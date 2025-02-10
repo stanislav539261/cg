@@ -14,9 +14,12 @@ constexpr GLfloat COLOR_ONE[] = { 1.f, 1.f, 1.f, 1.f };
 constexpr GLfloat COLOR_ZERO[] = { 0.f, 0.f, 0.f, 0.f };
 constexpr GLfloat DEPTH_ONE[] = { 1.f };
 constexpr GLfloat DEPTH_ZERO[] = { 0.f };
-constexpr size_t MAX_NUM_LIGHTPOINTS = 1024;
-constexpr GLuint SHADOW_CSM_SIZE = 2048;
-constexpr GLuint SHADOW_CUBE_SIZE = 1024;
+constexpr GLuint  GRID_SIZE_X = 16;
+constexpr GLuint  GRID_SIZE_Y = 8;
+constexpr GLuint  GRID_SIZE_Z = 24;
+constexpr size_t  MAX_LIGHTPOINTS = 1024;
+constexpr GLuint  SHADOW_CSM_SIZE = 2048;
+constexpr GLuint  SHADOW_CUBE_SIZE = 1024;
 
 std::shared_ptr<Render> g_Render = nullptr;
 
@@ -140,6 +143,10 @@ Render::Render() {
 
             // Create buffers
             auto cameraBuffer = std::make_shared<Buffer<GpuCamera>>();
+            auto clusterBuffer = std::make_shared<Buffer<GpuCluster>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z);
+            auto lightCounterBuffer = std::make_shared<Buffer<unsigned int>>();
+            auto lightGridBuffer = std::make_shared<Buffer<GpuLightGrid>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z);
+            auto lightIndexBuffer = std::make_shared<Buffer<unsigned int>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z * MAX_LIGHTPOINTS);
 
             // Create samplers
             auto samplerBorderWhite = std::make_shared<Sampler>();
@@ -249,12 +256,18 @@ Render::Render() {
             assert(ambientOcclusionTemporalShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_temporal.vert"));
             assert(ambientOcclusionTemporalShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_temporal.frag"));
 
+            auto clusterShaderProgram = std::make_shared<ShaderProgram>();
+            assert(clusterShaderProgram->Link(GL_COMPUTE_SHADER, g_ResourcePath / "shaders/compute_clusters.comp"));
+
             auto depthShaderProgram = std::make_shared<ShaderProgram>();
             assert(depthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/depth.vert"));
 
             auto downsampleDepthShaderProgram = std::make_shared<ShaderProgram>();
             assert(downsampleDepthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/downsample_depth.vert"));
             assert(downsampleDepthShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/downsample_depth.frag"));
+
+            auto lightCullingShaderProgram = std::make_shared<ShaderProgram>();
+            assert(lightCullingShaderProgram->Link(GL_COMPUTE_SHADER, g_ResourcePath / "shaders/light_culling.comp"));
 
             auto lightingShaderProgram = std::make_shared<ShaderProgram>();
             assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
@@ -284,6 +297,8 @@ Render::Render() {
             m_AmbientOcclusionTemporalShaderProgram = ambientOcclusionTemporalShaderProgram;
             m_AmbientOcclusionTemporalTexture2D = ambientOcclusionTemporalTexture2D;
             m_CameraBuffer = cameraBuffer;
+            m_ClusterBuffer = clusterBuffer;
+            m_ClusterShaderProgram = clusterShaderProgram;
             m_DepthFramebuffer = depthFramebuffer;
             m_DepthShaderProgram = depthShaderProgram;
             m_DepthTexture2D = depthTexture2D;
@@ -295,6 +310,10 @@ Render::Render() {
             m_LastDepthTexture2D = lastDepthTexture2D;
             m_LastDepthTextureView2Ds = lastDepthTextureView2Ds;
             m_LastLightingFramebuffer = lastLightingFramebuffer;
+            m_LightCullingShaderProgram = lightCullingShaderProgram;
+            m_LightCounterBuffer = lightCounterBuffer;
+            m_LightGridBuffer = lightGridBuffer;
+            m_LightIndexBuffer = lightIndexBuffer;
             m_LightingFramebuffer = lightingFramebuffer;
             m_LightingShaderProgram = lightingShaderProgram;
             m_LightingTexture2D = lightingTexture2D;
@@ -398,7 +417,7 @@ void Render::LoadModel(const Model &model) {
     auto drawIndirectBuffer = std::make_shared<DrawIndirectBuffer>(model.m_Meshes.size());
     auto indexBuffer = std::make_shared<Buffer<GpuIndex>>(model.NumIndices());
     auto lightEnvironmentBuffer = std::make_shared<Buffer<GpuLightEnvironment>>();
-    auto lightPointBuffer = std::make_shared<Buffer<GpuLightPoint>>(MAX_NUM_LIGHTPOINTS);
+    auto lightPointBuffer = std::make_shared<Buffer<GpuLightPoint>>(MAX_LIGHTPOINTS);
     auto vertexBuffer = std::make_shared<Buffer<GpuVertex>>(model.NumVertices());
 
     auto meshes = std::vector<std::tuple<GLuint, GLuint>>();
@@ -458,25 +477,36 @@ void Render::Update() {
 
     static glm::mat4 cameraLastView = glm::identity<glm::mat4>();
 
-    auto cameraProjection = g_Camera->Projection(m_EnableReverseZ);
-    auto cameraFovY = glm::radians(g_Camera->m_FovY);
-    auto cameraHalfFovY = cameraFovY * 0.5f;
-    auto cameraV = glm::tan(cameraHalfFovY);
-    auto cameraH = g_Camera->m_AspectRatio * cameraV;
-    auto cameraHalfFovX = glm::atan(cameraH);
-    auto cameraFovX = cameraHalfFovX * 2.f;
-    auto cameraView = g_Camera->View();
+    const auto cameraProjection = g_Camera->Projection(m_EnableReverseZ);
+    const auto cameraProjectionNonReversed = m_EnableReverseZ ? g_Camera->Projection(false) : cameraProjection;
+    const auto cameraFovY = glm::radians(g_Camera->m_FovY);
+    const auto cameraHalfFovY = cameraFovY * 0.5f;
+    const auto cameraV = glm::tan(cameraHalfFovY);
+    const auto cameraH = g_Camera->m_AspectRatio * cameraV;
+    const auto cameraHalfFovX = glm::atan(cameraH);
+    const auto cameraFovX = cameraHalfFovX * 2.f;
+    const auto cameraView = g_Camera->View();
+    const auto cameraNormTileDim = glm::vec2(1.f / static_cast<float>(GRID_SIZE_X), 1.f / static_cast<float>(GRID_SIZE_Y));
+    const auto cameraTileSizeInv = glm::vec2(1.f / (g_Window->m_ScreenWidth * cameraNormTileDim.x), 1.f / (g_Window->m_ScreenHeight * cameraNormTileDim.y));
+    const auto cameraSliceBiasFactor = -((static_cast<float>(GRID_SIZE_Z) * std::log2(g_Camera->m_NearZ)) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ));
+    const auto cameraSliceScalingFactor = static_cast<float>(GRID_SIZE_Z) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ);
 
     auto gpuCamera = GpuCamera {
         .m_LastView = cameraLastView,
         .m_Projection = cameraProjection,
         .m_ProjectionInversed = glm::inverse(cameraProjection),
+        .m_ProjectionNonReversed = cameraProjectionNonReversed,
+        .m_ProjectionNonReversedInversed = glm::inverse(cameraProjectionNonReversed),
         .m_View = cameraView,
         .m_Position = g_Camera->m_Position,
+        .m_NormTileDim = cameraNormTileDim,
+        .m_TileSizeInv = cameraTileSizeInv,
         .m_FarZ = g_Camera->m_FarZ,
         .m_NearZ = g_Camera->m_NearZ,
         .m_FovX = cameraFovX,
         .m_FovY = cameraFovY,
+        .m_SliceBiasFactor = cameraSliceBiasFactor,
+        .m_SliceScalingFactor = cameraSliceScalingFactor,
     };
 
     cameraLastView = std::move(cameraView);
@@ -501,8 +531,10 @@ void Render::Update() {
         m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
     }
 
+    m_LightCounterBuffer->SetData(0, 0);
+
     if (m_LightPointBuffer) {
-        for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_NUM_LIGHTPOINTS); i++) {
+        for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHTPOINTS); i++) {
             const auto &lightPoint = g_LightPoints[i];
 
             const auto gpuLightPoint = GpuLightPoint {
@@ -545,9 +577,9 @@ void Render::Update() {
         while (m_ShadowCubeDepthTextureViewCubes.size() < g_LightPoints.size()) {
             m_ShadowCubeDepthTextureViewCubes.push_back(
                 std::make_shared<TextureViewCube>(
-                    m_ShadowCubeDepthTextureCubeArray, 
-                    0, 
-                    1, 
+                    m_ShadowCubeDepthTextureCubeArray,
+                    0,
+                    1,
                     m_ShadowCubeDepthTextureViewCubes.size() * 6
                 )
             );
@@ -568,6 +600,8 @@ void Render::Update() {
     AmbientOcclusionPass();
     AmbientOcclusionSpartialPass();
     AmbientOcclusionTemporalPass();
+    ClusterPass();
+    LightCullingPass();
     LightingPass();
     ScreenPass();
 
@@ -824,6 +858,62 @@ void Render::AmbientOcclusionTemporalPass() {
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
+void Render::ClusterPass() {
+    assert(m_ClusterShaderProgram);
+    
+    m_ClusterShaderProgram->Use();
+
+    if (!m_CameraBuffer) {
+        return;
+    }
+    if (!m_ClusterBuffer) {
+        return;
+    }
+
+    m_CameraBuffer->Bind(0);
+    m_ClusterBuffer->Bind(1);
+
+    glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+}
+
+void Render::LightCullingPass() {
+    assert(m_LightCullingShaderProgram);
+    
+    m_LightCullingShaderProgram->Use();
+
+    if (!m_CameraBuffer) {
+        return;
+    }
+    if (!m_ClusterBuffer) {
+        return;
+    }
+    if (!m_LightCounterBuffer) {
+        return;
+    }
+    if (!m_LightGridBuffer) {
+        return;
+    }
+    if (!m_LightIndexBuffer) {
+        return;
+    }
+    if (!m_LightPointBuffer) {
+        return;
+    }
+
+    m_CameraBuffer->Bind(0);
+    m_ClusterBuffer->Bind(1);
+    m_LightCounterBuffer->Bind(2);
+    m_LightGridBuffer->Bind(3);
+    m_LightIndexBuffer->Bind(4);
+    m_LightPointBuffer->Bind(5);
+
+    glUniform1ui(0, g_LightPoints.size());
+
+    glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
+    glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+}
+
 void Render::LightingPass() {
     glEnable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
@@ -843,24 +933,39 @@ void Render::LightingPass() {
     m_LightingFramebuffer->Bind();
     m_LightingFramebuffer->ClearColor(0, 0.f, 0.f, 0.f, 1.f);
 
-    if (m_CameraBuffer) {
-        m_CameraBuffer->Bind(0);
+    if (!m_CameraBuffer) {
+        return;
     }
-    if (m_IndexBuffer) {
-        m_IndexBuffer->Bind(1);
+    if (!m_IndexBuffer) {
+        return;
     }
-    if (m_LightEnvironmentBuffer) {
-        m_LightEnvironmentBuffer->Bind(2);
+    if (!m_LightEnvironmentBuffer) {
+        return;
     }
-    if (m_LightPointBuffer) {
-        m_LightPointBuffer->Bind(3);
+    if (!m_LightGridBuffer) {
+        return;
     }
-    if (m_MaterialBuffer) {
-        m_MaterialBuffer->Bind(4);
+    if (!m_LightIndexBuffer) {
+        return;
     }
-    if (m_VertexBuffer) {
-        m_VertexBuffer->Bind(5);
+    if (!m_LightPointBuffer) {
+        return;
     }
+    if (!m_MaterialBuffer) {
+        return;
+    }
+    if (!m_VertexBuffer) {
+        return;
+    }
+
+    m_CameraBuffer->Bind(0);
+    m_IndexBuffer->Bind(1);
+    m_LightEnvironmentBuffer->Bind(2);
+    m_LightGridBuffer->Bind(3);
+    m_LightIndexBuffer->Bind(4);
+    m_LightPointBuffer->Bind(5);
+    m_MaterialBuffer->Bind(6);
+    m_VertexBuffer->Bind(7);
 
     assert(m_AmbientOcclusionTemporalTexture2D);
 

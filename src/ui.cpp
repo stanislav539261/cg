@@ -54,6 +54,7 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
             // Global
             ImGui::Checkbox("Enable Ambient Occlusion", &g_Render->m_EnableAmbientOcclusion);
             ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);
+            ImGui::Checkbox("Enable VSync", &g_Render->m_EnableVSync);
             ImGui::Checkbox("Enable Wireframe Mode", &g_Render->m_EnableWireframeMode);
 
             // LightEnvironment

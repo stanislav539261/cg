@@ -114,8 +114,6 @@ Render::Render() {
         m_Context = SDL_GL_CreateContext(g_Window->m_Window);
     }
 
-    SDL_GL_SetSwapInterval(-1);
-
     if (m_Context) {
         auto result = glewInit();
 
@@ -136,6 +134,7 @@ Render::Render() {
 
             m_EnableAmbientOcclusion = true;
             m_EnableReverseZ = true;
+            m_EnableVSync = false;
             m_EnableWireframeMode = false;
             m_NumFrames = 0;
             m_ShadowCsmVarianceMax = 0.00008f;
@@ -470,6 +469,16 @@ void Render::LoadModel(const Model &model) {
 void Render::Update() {
     if (!m_Context) {
         return;
+    }
+
+    if (m_EnableVSync) {
+        if (SDL_GL_GetSwapInterval() != 1) {
+            SDL_GL_SetSwapInterval(1);
+        }
+    } else {
+        if (SDL_GL_GetSwapInterval() != 0) {
+            SDL_GL_SetSwapInterval(0);
+        }
     }
 
     // Update camera

@@ -548,6 +548,8 @@ void Render::Update() {
 
     m_LightCounterBuffer->SetData(0, 0);
 
+    auto numLightPointShadows = 0u;
+
     if (m_LightPointBuffer) {
         for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHTPOINTS); i++) {
             const auto &lightPoint = g_LightPoints[i];
@@ -557,20 +559,25 @@ void Render::Update() {
                 .m_Position = lightPoint->m_Position,
                 .m_Radius = lightPoint->m_Radius,
                 .m_BaseColor = lightPoint->m_BaseColor,
+                .m_ShadowIndex = lightPoint->m_CastShadows ? static_cast<int>(numLightPointShadows) : -1,
             };
 
             m_LightPointBuffer->SetData(gpuLightPoint, i);
+
+            if (lightPoint->m_CastShadows) {
+                numLightPointShadows++;
+            }
         }
     }
 
-    if (!m_ShadowCubeColorTextureCubeArray || m_ShadowCubeColorTextureCubeArray->m_Depth < g_LightPoints.size() * 6) {
-        const auto layers = std::max(g_LightPoints.size() * 6lu, 6lu);
+    if (!m_ShadowCubeColorTextureCubeArray || m_ShadowCubeColorTextureCubeArray->m_Depth < numLightPointShadows * 6) {
+        const auto layers = std::max(numLightPointShadows * 6lu, 6lu);
         const auto size = SHADOW_CUBE_SIZE;
 
         m_ShadowCubeColorTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_R16);
         m_ShadowCubeColorTextureViewCubes.clear();
     
-        while (m_ShadowCubeColorTextureViewCubes.size() < layers / 6) {
+        while (m_ShadowCubeColorTextureViewCubes.size() < std::max(numLightPointShadows, 1u)) {
             m_ShadowCubeColorTextureViewCubes.push_back(
                 std::make_shared<TextureViewCube>(
                     m_ShadowCubeColorTextureCubeArray, 
@@ -582,14 +589,14 @@ void Render::Update() {
         }
     }
 
-    if (!m_ShadowCubeDepthTextureCubeArray || m_ShadowCubeDepthTextureCubeArray->m_Depth < g_LightPoints.size() * 6) {
-        const auto layers = std::max(g_LightPoints.size() * 6lu, 6lu);
+    if (!m_ShadowCubeDepthTextureCubeArray || m_ShadowCubeDepthTextureCubeArray->m_Depth < numLightPointShadows * 6) {
+        const auto layers = std::max(numLightPointShadows * 6lu, 6lu);
         const auto size = SHADOW_CUBE_SIZE;
 
         m_ShadowCubeDepthTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_DEPTH_COMPONENT16);
         m_ShadowCubeDepthTextureViewCubes.clear();
 
-        while (m_ShadowCubeDepthTextureViewCubes.size() < layers / 6) {
+        while (m_ShadowCubeDepthTextureViewCubes.size() < std::max(numLightPointShadows, 1u)) {
             m_ShadowCubeDepthTextureViewCubes.push_back(
                 std::make_shared<TextureViewCube>(
                     m_ShadowCubeDepthTextureCubeArray,
@@ -706,9 +713,17 @@ void Render::ShadowCubePass() {
     m_LightPointBuffer->Bind(1);
     m_VertexBuffer->Bind(2);
 
-    for (auto i = 0u; i < m_ShadowCubeColorTextureViewCubes.size(); i++) {
-        m_ShadowCubeFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCubeColorTextureViewCubes.at(i));
-        m_ShadowCubeFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_ShadowCubeDepthTextureViewCubes.at(i));
+    auto numLightPointShadows = 0;
+
+    for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHTPOINTS); i++) {
+        const auto &lightPoint = g_LightPoints[i];
+
+        if (!lightPoint->m_CastShadows) {
+            continue;
+        }
+
+        m_ShadowCubeFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCubeColorTextureViewCubes.at(numLightPointShadows));
+        m_ShadowCubeFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_ShadowCubeDepthTextureViewCubes.at(numLightPointShadows));
         m_ShadowCubeFramebuffer->ClearColor(0, 1.f, 1.f, 1.f, 1.f);
         m_ShadowCubeFramebuffer->ClearDepth(0, 1.f);
 
@@ -719,6 +734,8 @@ void Render::ShadowCubePass() {
 
             glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
         }
+
+        numLightPointShadows++;
     }
 }
 
@@ -943,7 +960,7 @@ void Render::LightCullingPass() {
     m_LightIndexBuffer->Bind(4);
     m_LightPointBuffer->Bind(5);
 
-    glUniform1ui(0, g_LightPoints.size());
+    glUniform1ui(0, std::min(g_LightPoints.size(), MAX_LIGHTPOINTS));
 
     glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -1036,7 +1053,7 @@ void Render::LightingPass() {
 
     glUniform1i(0, m_EnableAmbientOcclusion);
     glUniform1i(1, m_EnableReverseZ);
-    glUniform1ui(2, g_LightPoints.size());
+    glUniform1ui(2, std::min(g_LightPoints.size(), MAX_LIGHTPOINTS));
     glUniform1f(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
     glUniform1f(4, m_ShadowCsmVarianceMax);
     glUniform1f(5, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);

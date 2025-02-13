@@ -107,10 +107,11 @@ glm::vec3 LightEnvironment::Forward() const {
     ));
 }
 
-LightPoint::LightPoint(const glm::vec3 &position, const glm::vec3 &baseColor, float radius) {
+LightPoint::LightPoint(const glm::vec3 &position, const glm::vec3 &baseColor, float radius, bool castShadows) {
     m_BaseColor = baseColor;
     m_Position = position;
     m_Radius = radius;
+    m_CastShadows = castShadows;
 }
 
 LightPoint::~LightPoint() {

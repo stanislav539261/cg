@@ -27,7 +27,7 @@ struct LightPoint {
     vec3  m_Position;
     float m_Radius;
     vec3  m_BaseColor;
-    float m_Padding0;
+    int   m_ShadowIndex;
 };
 
 struct Material {
@@ -240,19 +240,19 @@ vec3 ComputeFresnelSchlick(vec3 F0, float cosTheta) {
 }
 
 float ComputeGeometrySchlickGGX(float cosLi, float cosLo, float roughness) {
-	float r = roughness + 1.f;
-	float k = (r * r) / 8.f;
+    float r = roughness + 1.f;
+    float k = (r * r) / 8.f;
     float termLi = cosLi * 1.f / (cosLi * (1.f - k) + k);
     float termLo = cosLo * 1.f / (cosLo * (1.f - k) + k);
     
-	return termLi * termLo;
+    return termLi * termLo;
 }
 
 float ComputeNdfGGX(float cosLh, float roughness) {
-	float roughness2 = roughness * roughness;
-	float roughness4 = roughness2 * roughness2;
-	float denom = (cosLh * cosLh) * (roughness4 - 1.0) + 1.0;
-	return roughness4 / (M_PI * denom * denom);
+    float roughness2 = roughness * roughness;
+    float roughness4 = roughness2 * roughness2;
+    float denom = (cosLh * cosLh) * (roughness4 - 1.0) + 1.0;
+    return roughness4 / (M_PI * denom * denom);
 }
 
 vec3 ComputePBR(vec3 normal, vec3 lightDir, vec3 viewDir, vec3 F0, vec3 albedo, float metalness, float roughness) {
@@ -298,16 +298,16 @@ mat3 ComputeTBN(vec3 normal, vec3 p, vec2 uv) {
 }
 
 vec3 ComputeGtaoMultiBounce(float ao, vec3 albedo) {
-	vec3 x = vec3(ao);
-	vec3 a = 2.0404 * albedo - vec3(0.3324);
-	vec3 b = -4.7951 * albedo + vec3(0.6417);
-	vec3 c = 2.7552 * albedo + vec3(0.6903);
+    vec3 x = vec3(ao);
+    vec3 a = 2.0404 * albedo - vec3(0.3324);
+    vec3 b = -4.7951 * albedo + vec3(0.6417);
+    vec3 c = 2.7552 * albedo + vec3(0.6903);
 
-	return max(x, ((x * a + b) * x + c) * x);
+    return max(x, ((x * a + b) * x + c) * x);
 }
 
 float LinearizeZ(const float depth, const float near, const float far) {
-	return near * far / (depth * (near - far) + far);
+    return near * far / (depth * (near - far) + far);
 }
 
 vec3 ComputeLighting(
@@ -348,8 +348,16 @@ vec3 ComputeLighting(
             const float lightDist2Rev2 = lightDist2Rev * lightDist2Rev;
             const float lightAttenuation = lightDist2Rev2 * 1.f / (1.f + lightDist);
 
-            const vec3 localLighting = g_LightPoints[lightIndex].m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, albedo, metalness, roughness);  
-            lighting += localLighting * lightAttenuation * ComputeShadowCube(-lightDir, lightDist, lightIndex);
+            vec3 localLighting = g_LightPoints[lightIndex].m_BaseColor * ComputePBR(normal, lightDir, viewDir, F0, albedo, metalness, roughness);  
+            localLighting *= lightAttenuation;
+
+            const int shadowIndex = g_LightPoints[lightIndex].m_ShadowIndex;
+
+            if (shadowIndex != -1) {
+                localLighting *= ComputeShadowCube(-lightDir, lightDist, uint(shadowIndex));
+            }
+
+            lighting += localLighting;
         }
     }
 

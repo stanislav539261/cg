@@ -100,10 +100,12 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
                 const auto positonName = std::string("Position##LightPoint") + std::to_string(i);
                 const auto baseColorName = std::string("Base color##LightPoint") + std::to_string(i);
                 const auto radiusName = std::string("Radius##LightPoint") + std::to_string(i);
+                const auto castShadowsName = std::string("Cast shadows##LightPoint") + std::to_string(i);
 
                 ImGui::DragFloat3(positonName.c_str(), reinterpret_cast<float *>(&lightPoint->m_Position));
                 ImGui::SliderFloat3(baseColorName.c_str(), reinterpret_cast<float *>(&lightPoint->m_BaseColor), 0.f, 1.f);
-                ImGui::DragFloat(radiusName.c_str(), reinterpret_cast<float *>(&lightPoint->m_Radius));
+                ImGui::DragFloat(radiusName.c_str(), &lightPoint->m_Radius);
+                ImGui::Checkbox(castShadowsName.c_str(), &lightPoint->m_CastShadows);
             }
 
             const auto lastLightPointName = std::string("LightPoint ") + std::to_string(i);

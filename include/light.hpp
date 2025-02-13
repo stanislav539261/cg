@@ -24,7 +24,7 @@ public:
 
 class LightPoint {
 public:
-    LightPoint(const glm::vec3 &, const glm::vec3 &, float);
+    LightPoint(const glm::vec3 &, const glm::vec3 &, float, bool = false);
     ~LightPoint();
 
     std::array<glm::mat4, 6>    ViewProjections(bool) const;
@@ -32,6 +32,7 @@ public:
     glm::vec3                   m_BaseColor;
     glm::vec3                   m_Position;
     float                       m_Radius;
+    bool                        m_CastShadows;
 };
 
 extern std::shared_ptr<LightEnvironment> g_LightEnvironment;

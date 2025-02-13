@@ -13,6 +13,27 @@
 #include "shader.hpp"
 #include "texture.hpp"
 
+enum struct DrawFlags : unsigned int {
+    AmbientOcclusion = 1 << 0,
+    Lighting = 1 << 1,
+};
+
+inline DrawFlags operator|(const DrawFlags a, const DrawFlags b) {
+    return static_cast<DrawFlags>(static_cast<unsigned int>(a) | static_cast<unsigned int>(b));
+}
+
+inline DrawFlags &operator|=(DrawFlags &a, const DrawFlags b) {
+    return a = a | b;
+}
+
+inline DrawFlags operator&(const DrawFlags a, const DrawFlags b) {
+    return static_cast<DrawFlags>(static_cast<unsigned int>(a) & static_cast<unsigned int>(b));
+}
+
+inline DrawFlags &operator&=(DrawFlags &a, const DrawFlags b) {
+    return a = a & b;
+}
+
 struct GpuCamera {
     glm::mat4   m_LastView;
     glm::mat4   m_Projection;
@@ -86,7 +107,13 @@ public:
     void                                            LoadModel(const Model &);
     void                                            Update();
 
+    float                                           m_AmbientOcclusionFalloffFar;
+    float                                           m_AmbientOcclusionFalloffNear;
+    int                                             m_AmbientOcclusionNumSamples;
+    int                                             m_AmbientOcclusionNumSlices;
+    float                                           m_AmbientOcclusionRadius;
     SDL_GLContext                                   m_Context;
+    DrawFlags                                       m_DrawFlags;
     bool                                            m_EnableAmbientOcclusion;
     bool                                            m_EnableReverseZ;
     bool                                            m_EnableVSync;

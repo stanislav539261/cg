@@ -61,6 +61,24 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
             ImGui::Checkbox("Enable Reverse Z", &g_Render->m_EnableReverseZ);
             ImGui::Checkbox("Enable VSync", &g_Render->m_EnableVSync);
             ImGui::Checkbox("Enable Wireframe Mode", &g_Render->m_EnableWireframeMode);
+            ImGui::Spacing();
+
+            auto drawAo = static_cast<bool>(g_Render->m_DrawFlags & DrawFlags::AmbientOcclusion);
+            auto drawLighting = static_cast<bool>(g_Render->m_DrawFlags & DrawFlags::Lighting);
+
+            if (ImGui::RadioButton("Ambient Occlusion##Global", drawAo)) {
+                g_Render->m_DrawFlags = DrawFlags::AmbientOcclusion;
+            }
+            if (ImGui::RadioButton("Lighting##Global", drawLighting)) {
+                g_Render->m_DrawFlags = DrawFlags::Lighting;
+            }
+
+            // Ambient Occlusion
+            ImGui::DragFloat("Falloff Far##AO", &g_Render->m_AmbientOcclusionFalloffFar);
+            ImGui::DragFloat("Falloff Near##AO", &g_Render->m_AmbientOcclusionFalloffNear);
+            ImGui::DragFloat("Radius##AO", &g_Render->m_AmbientOcclusionRadius);
+            ImGui::DragInt("Num samples##AO", &g_Render->m_AmbientOcclusionNumSamples, 1.f, 1);
+            ImGui::DragInt("Num slices##AO", &g_Render->m_AmbientOcclusionNumSlices, 1.f, 1);
 
             // LightEnvironment
             ImGui::SeparatorText("LightEnvironment");

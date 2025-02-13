@@ -134,6 +134,12 @@ Render::Render() {
             glGenVertexArrays(1, &emptyVAO);
             glBindVertexArray(emptyVAO);
 
+            m_AmbientOcclusionFalloffFar = 2000.f;
+            m_AmbientOcclusionFalloffNear = 1.f;
+            m_AmbientOcclusionNumSamples = 4;
+            m_AmbientOcclusionNumSlices = 4;
+            m_AmbientOcclusionRadius = 4.f;
+            m_DrawFlags = DrawFlags::Lighting;
             m_EnableAmbientOcclusion = true;
             m_EnableReverseZ = true;
             m_EnableVSync = false;
@@ -817,12 +823,13 @@ void Render::AmbientOcclusionPass() {
     constexpr std::array<float, 4> offsets = { 0.0f, 0.5f, 0.25f, 0.75f };
     constexpr std::array<float, 6> rotations = { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
 
-    glUniform1f(0, 1000.f);
-    glUniform1f(1, 1.f);
-    glUniform1i(2, 8);
-    glUniform1f(3, offsets[m_NumFrames / 6 % offsets.size()]);
-    glUniform1f(4, 8.f);
-    glUniform1f(5, rotations[m_NumFrames % 6] / 360.f);
+    glUniform1f(0, m_AmbientOcclusionFalloffFar);
+    glUniform1f(1, m_AmbientOcclusionFalloffNear);
+    glUniform1ui(2, std::max(m_AmbientOcclusionNumSamples, 1));
+    glUniform1ui(3, std::max(m_AmbientOcclusionNumSlices, 1));
+    glUniform1f(4, offsets[m_NumFrames / 6 % offsets.size()]);
+    glUniform1f(5, m_AmbientOcclusionRadius);
+    glUniform1f(6, rotations[m_NumFrames % 6] / 360.f);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -849,7 +856,9 @@ void Render::AmbientOcclusionSpartialPass() {
     assert(m_AmbientOcclusionTexture2D);
 
     m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp);
-    m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
+    m_DepthTextureView2Ds.at(0)->Bind(1, m_SamplerClamp);
+
+    glUniform1i(0, m_EnableReverseZ);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -1054,10 +1063,20 @@ void Render::ScreenPass() {
     assert(m_ScreenShaderProgram);
 
     m_ScreenFramebuffer->Bind(); 
-
-    m_LightingTexture2D->Bind(0, m_SamplerClamp);
-
     m_ScreenShaderProgram->Use();
+
+    switch (m_DrawFlags) {
+        case DrawFlags::AmbientOcclusion:
+            m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp);
+            break;
+        case DrawFlags::Lighting:
+            m_LightingTexture2D->Bind(0, m_SamplerClamp);
+            break;
+        default:
+            break;
+    }
+
+    glUniform1ui(0, static_cast<unsigned int>(m_DrawFlags));
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }

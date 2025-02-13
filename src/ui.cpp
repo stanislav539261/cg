@@ -74,6 +74,7 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
             }
 
             // Ambient Occlusion
+            ImGui::SeparatorText("Ambient Occlusion");
             ImGui::DragFloat("Falloff Far##AO", &g_Render->m_AmbientOcclusionFalloffFar);
             ImGui::DragFloat("Falloff Near##AO", &g_Render->m_AmbientOcclusionFalloffNear);
             ImGui::DragFloat("Radius##AO", &g_Render->m_AmbientOcclusionRadius);

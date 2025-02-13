@@ -83,8 +83,8 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
 
             // LightEnvironment
             ImGui::SeparatorText("LightEnvironment");
-            ImGui::SliderFloat3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor), 0.f, 1.f);
-            ImGui::SliderFloat3("Base color", reinterpret_cast<float *>(&g_LightEnvironment->m_BaseColor), 0.f, 1.f);
+            ImGui::ColorEdit3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor));
+            ImGui::ColorEdit3("Base color", reinterpret_cast<float *>(&g_LightEnvironment->m_BaseColor));
             ImGui::SliderFloat("Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
             ImGui::SliderFloat("Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
 
@@ -104,7 +104,7 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
                 const auto castShadowsName = std::string("Cast shadows##LightPoint") + std::to_string(i);
 
                 ImGui::DragFloat3(positonName.c_str(), reinterpret_cast<float *>(&lightPoint->m_Position));
-                ImGui::SliderFloat3(baseColorName.c_str(), reinterpret_cast<float *>(&lightPoint->m_BaseColor), 0.f, 1.f);
+                ImGui::ColorEdit3(baseColorName.c_str(), reinterpret_cast<float *>(&lightPoint->m_BaseColor));
                 ImGui::DragFloat(radiusName.c_str(), &lightPoint->m_Radius);
                 ImGui::Checkbox(castShadowsName.c_str(), &lightPoint->m_CastShadows);
             }

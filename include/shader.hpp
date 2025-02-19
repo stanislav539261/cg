@@ -10,8 +10,8 @@ public:
     ShaderProgram();
     ~ShaderProgram();
 
-    bool    Link(GLenum, const std::filesystem::path &);
-    void    Use();
+    bool    Link(GLenum, const std::filesystem::path &) const;
+    void    Use() const;
 
     GLuint  m_Handle;
 };

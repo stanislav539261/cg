@@ -2,7 +2,6 @@
 #include <iostream>
 
 #include <glm/ext/matrix_transform.hpp>
-#include <random>
 
 #include "camera.hpp"
 #include "light.hpp"
@@ -17,11 +16,26 @@ constexpr GLfloat DEPTH_ZERO[] = { 0.f };
 constexpr GLuint  GRID_SIZE_X = 16;
 constexpr GLuint  GRID_SIZE_Y = 8;
 constexpr GLuint  GRID_SIZE_Z = 24;
-constexpr size_t  MAX_LIGHTPOINTS = 1024;
+constexpr size_t  MAX_LIGHT_POINTS = 1024;
 constexpr GLuint  SHADOW_CSM_SIZE = 2048;
 constexpr GLuint  SHADOW_CUBE_SIZE = 1024;
+constexpr GLuint  TEXTURE_SIZE = 1024;
 
-std::shared_ptr<Render> g_Render = nullptr;
+std::unique_ptr<Render> g_Render = nullptr;
+
+static GLuint ComputeMipLevel(const glm::uvec2 &extent) {
+    auto minHeight = extent.y;
+    auto minWidth = extent.x;
+    auto mipLevel = 0u;
+
+    for (auto i = 0u; minHeight > 0 && minWidth > 0; i++) {
+        mipLevel++;
+        minHeight /= 2;
+        minWidth /= 2;
+    }
+
+    return mipLevel;
+}
 
 static void GLAPIENTRY DebugMessageCallback(
     GLenum source, 
@@ -145,196 +159,130 @@ Render::Render() {
             m_EnableVSync = false;
             m_EnableWireframeMode = false;
             m_NumFrames = 0;
+            m_ShadowCsmFilterRadius = 2.f;
             m_ShadowCsmVarianceMax = 0.00008f;
+            m_ShadowCubeFilterRadius = 2.f;
             m_ShadowCubeVarianceMax = 0.00008f;
 
             // Create buffers
-            auto cameraBuffer = std::make_shared<Buffer<GpuCamera>>();
-            auto clusterBuffer = std::make_shared<Buffer<GpuCluster>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z);
-            auto lightCounterBuffer = std::make_shared<Buffer<unsigned int>>();
-            auto lightGridBuffer = std::make_shared<Buffer<GpuLightGrid>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z);
-            auto lightIndexBuffer = std::make_shared<Buffer<unsigned int>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z * MAX_LIGHTPOINTS);
-
-            // Create samplers
-            auto samplerBorderWhite = std::make_shared<Sampler>();
-            samplerBorderWhite->SetParameter(GL_TEXTURE_BORDER_COLOR, glm::vec4(1.f));
-            samplerBorderWhite->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
-            samplerBorderWhite->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
-            samplerBorderWhite->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
-            samplerBorderWhite->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
-            samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
-            samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
-            samplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
-
-            auto samplerClamp = std::make_shared<Sampler>();
-            samplerClamp->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
-            samplerClamp->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
-            samplerClamp->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
-            samplerClamp->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
-            samplerClamp->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
-            samplerClamp->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
-            samplerClamp->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
-
-            auto samplerWrap = std::make_shared<Sampler>();
-            samplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
-            samplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
-            samplerWrap->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
-            samplerWrap->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
-            samplerWrap->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
-            samplerWrap->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
-            samplerWrap->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
-
-            // Create textures
-            auto height = g_Window->m_ScreenHeight;
-            auto width = g_Window->m_ScreenWidth;
-            auto minHeight = height;
-            auto minWidth = width;
-            auto mipLevel = 0u;
-
-            for (auto i = 0u; minHeight > 0 && minWidth > 0; i++) {
-                mipLevel++;
-                minHeight /= 2;
-                minWidth /= 2;
-            }
-
-            auto ambientOcclusionTexture2D = std::make_shared<Texture2D>(width, height , 1, GL_R16F);
-            auto ambientOcclusionSpartialTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
-            auto ambientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
-            auto depthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
-            auto lastAmbientOcclusionTemporalTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_R16F);
-            auto lastDepthTexture2D = std::make_shared<Texture2D>(width, height, mipLevel, GL_DEPTH_COMPONENT32F);
-            auto lightingTexture2D = std::make_shared<Texture2D>(width, height, 1, GL_RGBA16F);
-            auto shadowCsmColorTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_CSM_SIZE, SHADOW_CSM_SIZE, 5, 1, GL_R32F);
-            auto shadowCsmDepthTexture2DArray = std::make_shared<Texture2DArray>(SHADOW_CSM_SIZE, SHADOW_CSM_SIZE, 5, 1, GL_DEPTH_COMPONENT32F);
-
-            auto depthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
-            auto lastDepthTextureView2Ds = std::vector<std::shared_ptr<TextureView2D>>();
-
-            for (auto i = 0u; i < mipLevel; i++) {
-                depthTextureView2Ds.push_back(std::make_shared<TextureView2D>(depthTexture2D, i, mipLevel - i, 0));
-                lastDepthTextureView2Ds.push_back(std::make_shared<TextureView2D>(lastDepthTexture2D, i, mipLevel - i, 0));
-            }
+            m_CameraBuffer = std::make_unique<Buffer<GpuCamera>>();
+            m_ClusterBuffer = std::make_unique<Buffer<GpuCluster>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z);
+            m_LightCounterBuffer = std::make_unique<Buffer<std::uint32_t>>();
+            m_LightGridBuffer = std::make_unique<const Buffer<GpuLightGrid>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z);
+            m_LightIndexBuffer = std::make_unique<const Buffer<std::uint32_t>>(GRID_SIZE_X * GRID_SIZE_Y * GRID_SIZE_Z * MAX_LIGHT_POINTS);
 
             // Create framebuffers
-            auto ambientOcclusionFramebuffer = std::make_shared<Framebuffer>();
-            ambientOcclusionFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionTexture2D);
+            m_AmbientOcclusionFramebuffer = std::make_unique<const Framebuffer>();
+            m_AmbientOcclusionSpartialFramebuffer = std::make_unique<const Framebuffer>();
+            m_AmbientOcclusionTemporalFramebuffer = std::make_unique<const Framebuffer>();
+            m_DepthFramebuffer = std::make_unique<const Framebuffer>();
+            m_DownsampleDepthFramebuffer = std::make_unique<const Framebuffer>();
+            m_LastDepthFramebuffer = std::make_unique<const Framebuffer>();
+            m_LastLightingFramebuffer = std::make_unique<const Framebuffer>();
+            m_LightingFramebuffer = std::make_unique<const Framebuffer>();
+            m_ShadowCsmFramebuffer = std::make_unique<const Framebuffer>();
+            m_ShadowCubeFramebuffer = std::make_unique<const Framebuffer>();
 
-            auto ambientOcclusionSpartialFramebuffer = std::make_shared<Framebuffer>();
-            ambientOcclusionSpartialFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionSpartialTexture2D);
+            // Create samplers
+            m_SamplerBorderWhite = std::make_unique<const Sampler>();
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_BORDER_COLOR, glm::vec4(1.f));
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
+            m_SamplerBorderWhite->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
-            auto ambientOcclusionTemporalFramebuffer = std::make_shared<Framebuffer>();
-            ambientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, ambientOcclusionTemporalTexture2D);
+            m_SamplerClamp = std::make_unique<const Sampler>();
+            m_SamplerClamp->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            m_SamplerClamp->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            m_SamplerClamp->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            m_SamplerClamp->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            m_SamplerClamp->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
+            m_SamplerClamp->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
+            m_SamplerClamp->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_CLAMP_TO_EDGE));
 
-            auto depthFramebuffer = std::make_shared<Framebuffer>();
-            depthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
-
-            auto downsampleDepthFramebuffer = std::make_shared<Framebuffer>();
-            downsampleDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTextureView2Ds[0]);
-
-            auto lastDepthFramebuffer = std::make_shared<Framebuffer>();
-            lastDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
-
-            auto lastLightingFramebuffer = std::make_shared<Framebuffer>();
-            lastLightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
-            lastLightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, lastDepthTexture2D);
-
-            auto lightingFramebuffer = std::make_shared<Framebuffer>();
-            lightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, lightingTexture2D);
-            lightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, depthTexture2D);
-
-            auto screenFramebuffer = std::make_shared<DefaultFramebuffer>();
-
-            auto shadowCsmFramebuffer = std::make_shared<Framebuffer>();
-            shadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, shadowCsmColorTexture2DArray);
-            shadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, shadowCsmDepthTexture2DArray);
-
-            auto shadowCubeFramebuffer = std::make_shared<Framebuffer>();
+            m_SamplerWrap = std::make_unique<const Sampler>();
+            m_SamplerWrap->SetParameter(GL_TEXTURE_MAG_FILTER, static_cast<GLenum>(GL_LINEAR));
+            m_SamplerWrap->SetParameter(GL_TEXTURE_MIN_FILTER, static_cast<GLenum>(GL_LINEAR_MIPMAP_NEAREST));
+            m_SamplerWrap->SetParameter(GL_TEXTURE_MAX_LOD, 1000.f);
+            m_SamplerWrap->SetParameter(GL_TEXTURE_MIN_LOD, 0.f);
+            m_SamplerWrap->SetParameter(GL_TEXTURE_WRAP_R, static_cast<GLenum>(GL_REPEAT));
+            m_SamplerWrap->SetParameter(GL_TEXTURE_WRAP_S, static_cast<GLenum>(GL_REPEAT));
+            m_SamplerWrap->SetParameter(GL_TEXTURE_WRAP_T, static_cast<GLenum>(GL_REPEAT));
 
             // Create shader programs
-            auto ambientOcclusionShaderProgram = std::make_shared<ShaderProgram>();
-            assert(ambientOcclusionShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao.vert"));
-            assert(ambientOcclusionShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao.frag"));
+            m_AmbientOcclusionShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_AmbientOcclusionShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "gtao.vert"));
+            assert(m_AmbientOcclusionShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "gtao.frag"));
             
-            auto ambientOcclusionSpartialShaderProgram = std::make_shared<ShaderProgram>();
-            assert(ambientOcclusionSpartialShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_spartial.vert"));
-            assert(ambientOcclusionSpartialShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_spartial.frag"));
+            m_AmbientOcclusionSpartialShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_AmbientOcclusionSpartialShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "gtao_spartial.vert"));
+            assert(m_AmbientOcclusionSpartialShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "gtao_spartial.frag"));
 
-            auto ambientOcclusionTemporalShaderProgram = std::make_shared<ShaderProgram>();
-            assert(ambientOcclusionTemporalShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/gtao_temporal.vert"));
-            assert(ambientOcclusionTemporalShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/gtao_temporal.frag"));
+            m_AmbientOcclusionTemporalShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_AmbientOcclusionTemporalShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "gtao_temporal.vert"));
+            assert(m_AmbientOcclusionTemporalShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "gtao_temporal.frag"));
 
-            auto clusterShaderProgram = std::make_shared<ShaderProgram>();
-            assert(clusterShaderProgram->Link(GL_COMPUTE_SHADER, g_ResourcePath / "shaders/compute_clusters.comp"));
+            m_ClusterShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_ClusterShaderProgram->Link(GL_COMPUTE_SHADER, g_ResourcePath / "shaders" / "compute_clusters.comp"));
 
-            auto depthShaderProgram = std::make_shared<ShaderProgram>();
-            assert(depthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/depth.vert"));
+            m_DepthShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_DepthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "depth.vert"));
 
-            auto downsampleDepthShaderProgram = std::make_shared<ShaderProgram>();
-            assert(downsampleDepthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/downsample_depth.vert"));
-            assert(downsampleDepthShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/downsample_depth.frag"));
+            m_DownsampleDepthShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_DownsampleDepthShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "downsample_depth.vert"));
+            assert(m_DownsampleDepthShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "downsample_depth.frag"));
 
-            auto lightCullingShaderProgram = std::make_shared<ShaderProgram>();
-            assert(lightCullingShaderProgram->Link(GL_COMPUTE_SHADER, g_ResourcePath / "shaders/light_culling.comp"));
+            m_LightCullingShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_LightCullingShaderProgram->Link(GL_COMPUTE_SHADER, g_ResourcePath / "shaders" / "light_culling.comp"));
 
-            auto lightingShaderProgram = std::make_shared<ShaderProgram>();
-            assert(lightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/lighting.vert"));
-            assert(lightingShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/lighting.frag"));
+            m_LightingShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_LightingShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "lighting.vert"));
+            assert(m_LightingShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "lighting.frag"));
 
-            auto screenShaderProgram = std::make_shared<ShaderProgram>();
-            assert(screenShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/screen.vert"));
-            assert(screenShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/screen.frag"));
+            m_ScreenShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_ScreenShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "screen.vert"));
+            assert(m_ScreenShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "screen.frag"));
 
-            auto shadowCsmShaderProgram = std::make_shared<ShaderProgram>();
-            assert(shadowCsmShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_csm.vert"));
-            assert(shadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_csm.frag"));
+            m_ShadowCsmShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_ShadowCsmShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "shadow_csm.vert"));
+            assert(m_ShadowCsmShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "shadow_csm.frag"));
 
-            auto shadowCubeShaderProgram = std::make_shared<ShaderProgram>();
-            assert(shadowCubeShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders/shadow_cube.vert"));
-            assert(shadowCubeShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders/shadow_cube.frag"));
+            m_ShadowCubeShaderProgram = std::make_unique<const ShaderProgram>();
+            assert(m_ShadowCubeShaderProgram->Link(GL_VERTEX_SHADER, g_ResourcePath / "shaders" / "shadow_cube.vert"));
+            assert(m_ShadowCubeShaderProgram->Link(GL_FRAGMENT_SHADER, g_ResourcePath / "shaders" / "shadow_cube.frag"));
 
-            m_AmbientOcclusionFramebuffer = ambientOcclusionFramebuffer;
-            m_AmbientOcclusionShaderProgram = ambientOcclusionShaderProgram;
-            m_AmbientOcclusionTexture2D = ambientOcclusionTexture2D;
-            m_AmbientOcclusionSpartialFramebuffer = ambientOcclusionSpartialFramebuffer;
-            m_AmbientOcclusionSpartialShaderProgram = ambientOcclusionSpartialShaderProgram;
-            m_AmbientOcclusionSpartialTexture2D = ambientOcclusionSpartialTexture2D;
-            m_AmbientOcclusionTemporalFramebuffer = ambientOcclusionTemporalFramebuffer;
-            m_AmbientOcclusionTemporalShaderProgram = ambientOcclusionTemporalShaderProgram;
-            m_AmbientOcclusionTemporalTexture2D = ambientOcclusionTemporalTexture2D;
-            m_CameraBuffer = cameraBuffer;
-            m_ClusterBuffer = clusterBuffer;
-            m_ClusterShaderProgram = clusterShaderProgram;
-            m_DepthFramebuffer = depthFramebuffer;
-            m_DepthShaderProgram = depthShaderProgram;
-            m_DepthTexture2D = depthTexture2D;
-            m_DepthTextureView2Ds = depthTextureView2Ds;
-            m_DownsampleDepthFramebuffer = downsampleDepthFramebuffer;
-            m_DownsampleDepthShaderProgram = downsampleDepthShaderProgram;
-            m_LastAmbientOcclusionTemporalTexture2D = lastAmbientOcclusionTemporalTexture2D;
-            m_LastDepthFramebuffer = lastDepthFramebuffer;
-            m_LastDepthTexture2D = lastDepthTexture2D;
-            m_LastDepthTextureView2Ds = lastDepthTextureView2Ds;
-            m_LastLightingFramebuffer = lastLightingFramebuffer;
-            m_LightCullingShaderProgram = lightCullingShaderProgram;
-            m_LightCounterBuffer = lightCounterBuffer;
-            m_LightGridBuffer = lightGridBuffer;
-            m_LightIndexBuffer = lightIndexBuffer;
-            m_LightingFramebuffer = lightingFramebuffer;
-            m_LightingShaderProgram = lightingShaderProgram;
-            m_LightingTexture2D = lightingTexture2D;
-            m_SamplerBorderWhite = samplerBorderWhite;
-            m_SamplerClamp = samplerClamp;
-            m_SamplerWrap = samplerWrap;
-            m_ScreenFramebuffer = screenFramebuffer;
-            m_ScreenShaderProgram = screenShaderProgram;
-            m_ShadowCsmColorTexture2DArray = shadowCsmColorTexture2DArray;
-            m_ShadowCsmDepthTexture2DArray = shadowCsmDepthTexture2DArray;
-            m_ShadowCsmFilterRadius = 2.f;
-            m_ShadowCsmFramebuffer = shadowCsmFramebuffer;
-            m_ShadowCsmShaderProgram = shadowCsmShaderProgram;
-            m_ShadowCubeFilterRadius = 2.f;
-            m_ShadowCubeFramebuffer = shadowCubeFramebuffer;
-            m_ShadowCubeShaderProgram = shadowCubeShaderProgram;
+            // Create textures
+            const auto screenExtent = glm::uvec2(g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
+            const auto screenMipLevel = ComputeMipLevel(screenExtent);
+
+            m_AmbientOcclusionTexture2D = std::make_unique<const Texture2D>(screenExtent , 1, GL_R16F);
+            m_AmbientOcclusionSpartialTexture2D = std::make_unique<const Texture2D>(screenExtent, 1, GL_R16F);
+            m_AmbientOcclusionTemporalTexture2D = std::make_unique<const Texture2D>(screenExtent, 1, GL_R16F);
+            m_DepthTexture2D = std::make_unique<const Texture2D>(screenExtent, screenMipLevel, GL_DEPTH_COMPONENT32F);
+            m_LastAmbientOcclusionTemporalTexture2D = std::make_unique<const Texture2D>(screenExtent, 1, GL_R16F);
+            m_LastDepthTexture2D = std::make_unique<const Texture2D>(screenExtent, screenMipLevel, GL_DEPTH_COMPONENT32F);
+            m_LightingTexture2D = std::make_unique<const Texture2D>(screenExtent, 1, GL_RGBA16F);
+            m_ShadowCsmColorTexture2DArray = std::make_unique<const Texture2DArray>(glm::uvec3(SHADOW_CSM_SIZE, SHADOW_CSM_SIZE, 5u), 1, GL_R32F);
+            m_ShadowCsmDepthTexture2DArray = std::make_unique<const Texture2DArray>(glm::uvec3(SHADOW_CSM_SIZE, SHADOW_CSM_SIZE, 5u), 1, GL_DEPTH_COMPONENT32F);
+            m_ShadowCubeColorTextureCubeArray = std::make_unique<const TextureCubeArray>(glm::uvec3(SHADOW_CUBE_SIZE, SHADOW_CUBE_SIZE, 6u), 1, GL_R32F);
+            m_ShadowCubeDepthTextureCubeArray = std::make_unique<const TextureCubeArray>(glm::uvec3(SHADOW_CUBE_SIZE, SHADOW_CUBE_SIZE, 6u), 1, GL_DEPTH_COMPONENT32F);
+
+            // Create texture views
+            m_DepthTextureView2Ds = std::vector<std::unique_ptr<const TextureView2D>>();
+            m_LastDepthTextureView2Ds = std::vector<std::unique_ptr<const TextureView2D>>();
+            m_ShadowCubeColorTextureViewCubes = std::vector<std::unique_ptr<const TextureViewCube>>();
+            m_ShadowCubeDepthTextureViewCubes = std::vector<std::unique_ptr<const TextureViewCube>>();
+
+            for (auto i = 0u; i < screenMipLevel; i++) {
+                m_DepthTextureView2Ds.push_back(std::make_unique<const TextureView2D>(m_DepthTexture2D.get(), i, screenMipLevel - i, 0));
+                m_LastDepthTextureView2Ds.push_back(std::make_unique<const TextureView2D>(m_LastDepthTexture2D.get(), i, screenMipLevel - i, 0));
+            }
+
+            m_ShadowCubeColorTextureViewCubes.push_back(std::make_unique<const TextureViewCube>(m_ShadowCubeColorTextureCubeArray.get(), 0, 1, 0));
+            m_ShadowCubeDepthTextureViewCubes.push_back(std::make_unique<const TextureViewCube>(m_ShadowCubeDepthTextureCubeArray.get(), 0, 1, 0));
         } else {
             std::cout << "Can't initialize GLEW. " << glewGetErrorString(result) << std::endl;
         }
@@ -352,48 +300,69 @@ void Render::LoadModel(const Model &model) {
         return;
     }
 
-    auto diffuseImages = std::vector<std::shared_ptr<Image>>();
-    auto metalnessImages = std::vector<std::shared_ptr<Image>>();
-    auto normalImages = std::vector<std::shared_ptr<Image>>();
-    auto roughnessImages = std::vector<std::shared_ptr<Image>>();
+    auto diffuseImages = std::vector<const Image *>();
+    auto metalnessImages = std::vector<const Image *>();
+    auto normalImages = std::vector<const Image *>();
+    auto roughnessImages = std::vector<const Image *>();
 
     for (const auto &material : model.m_Materials) {
         if (material.m_DiffuseImage) {
-            diffuseImages.push_back(material.m_DiffuseImage);
+            diffuseImages.push_back(material.m_DiffuseImage.get());
         }
         if (material.m_MetalnessImage) {
-            metalnessImages.push_back(material.m_MetalnessImage);
+            metalnessImages.push_back(material.m_MetalnessImage.get());
         }
         if (material.m_NormalImage) {
-            normalImages.push_back(material.m_NormalImage);
+            normalImages.push_back(material.m_NormalImage.get());
         }
         if (material.m_RoughnessImage) {
-            roughnessImages.push_back(material.m_RoughnessImage);
+            roughnessImages.push_back(material.m_RoughnessImage.get());
         }
     }
 
     // Load textures
-    // Better use texture atlas (my GPU doesn't support bindless textures) than texture array
-    auto diffuseTexture2DArray = std::shared_ptr<Texture2DArray>();
-    auto metalnessTexture2DArray = std::shared_ptr<Texture2DArray>();
-    auto normalTexture2DArray = std::shared_ptr<Texture2DArray>();
-    auto roughnessTexture2DArray = std::shared_ptr<Texture2DArray>();
+    // Use texture arrays because my GPU doesn't support bindless textures
+    auto diffuseTexture2DArray = std::unique_ptr<const Texture2DArray>();
+    auto metalnessTexture2DArray = std::unique_ptr<const Texture2DArray>();
+    auto normalTexture2DArray = std::unique_ptr<const Texture2DArray>();
+    auto roughnessTexture2DArray = std::unique_ptr<const Texture2DArray>();
+
+    const auto extent = glm::uvec3(glm::uvec2(TEXTURE_SIZE), diffuseImages.size());
+    const auto mipLevel = ComputeMipLevel(extent);
 
     if (diffuseImages.size() > 0) {
-        diffuseTexture2DArray = std::make_shared<Texture2DArray>(diffuseImages);
+        diffuseTexture2DArray = std::make_unique<const Texture2DArray>(extent, mipLevel, GL_RGB8);
     }
     if (metalnessImages.size() > 0) {
-        metalnessTexture2DArray = std::make_shared<Texture2DArray>(metalnessImages);
+        metalnessTexture2DArray = std::make_unique<const Texture2DArray>(extent, mipLevel, GL_R8);
     }
     if (normalImages.size() > 0) {
-        normalTexture2DArray = std::make_shared<Texture2DArray>(normalImages);
+        normalTexture2DArray = std::make_unique<const Texture2DArray>(extent, mipLevel, GL_RGB8);
     }
     if (roughnessImages.size() > 0) {
-        roughnessTexture2DArray = std::make_shared<Texture2DArray>(roughnessImages);
+        roughnessTexture2DArray = std::make_unique<const Texture2DArray>(extent, mipLevel, GL_R8);
     }
 
+    for (auto i = 0u; i < diffuseImages.size(); i++) {
+        diffuseTexture2DArray->Upload(diffuseImages[i], glm::uvec3(0, 0, i), 0);
+    }
+    for (auto i = 0u; i < metalnessImages.size(); i++) {
+        metalnessTexture2DArray->Upload(metalnessImages[i], glm::uvec3(0, 0, i), 0);
+    }
+    for (auto i = 0u; i < normalImages.size(); i++) {
+        normalTexture2DArray->Upload(normalImages[i], glm::uvec3(0, 0, i), 0);
+    }
+    for (auto i = 0u; i < roughnessImages.size(); i++) {
+        roughnessTexture2DArray->Upload(roughnessImages[i], glm::uvec3(0, 0, i), 0);
+    }
+
+    diffuseTexture2DArray->GenerateMipMaps();
+    metalnessTexture2DArray->GenerateMipMaps();
+    normalTexture2DArray->GenerateMipMaps();
+    roughnessTexture2DArray->GenerateMipMaps();
+
     // Load buffers
-    auto materialBuffer = std::make_shared<Buffer<GpuMaterial>>(model.m_Materials.size());
+    auto materialBuffer = std::make_unique<const Buffer<GpuMaterial>>(model.m_Materials.size());
 
     auto materials = std::vector<GpuMaterial>();
     auto numDiffuseImages = 0u;
@@ -417,13 +386,13 @@ void Render::LoadModel(const Model &model) {
         materials.push_back(gpuMaterial);
     }
 
-    materialBuffer->SetData(materials, 0);
+    materialBuffer->Upload(materials, 0);
 
-    auto drawIndirectBuffer = std::make_shared<DrawIndirectBuffer>(model.m_Meshes.size());
-    auto indexBuffer = std::make_shared<Buffer<GpuIndex>>(model.NumIndices());
-    auto lightEnvironmentBuffer = std::make_shared<Buffer<GpuLightEnvironment>>();
-    auto lightPointBuffer = std::make_shared<Buffer<GpuLightPoint>>(MAX_LIGHTPOINTS);
-    auto vertexBuffer = std::make_shared<Buffer<GpuVertex>>(model.NumVertices());
+    auto drawIndirectBuffer = std::make_unique<const DrawIndirectBuffer>(model.m_Meshes.size());
+    auto indexBuffer = std::make_unique<const Buffer<GpuIndex>>(model.NumIndices());
+    auto lightEnvironmentBuffer = std::make_unique<const Buffer<GpuLightEnvironment>>();
+    auto lightPointBuffer = std::make_unique<const Buffer<GpuLightPoint>>(MAX_LIGHT_POINTS);
+    auto vertexBuffer = std::make_unique<const Buffer<GpuVertex>>(model.NumVertices());
 
     auto meshes = std::vector<std::tuple<GLuint, GLuint>>();
     auto indexOffset = 0u;
@@ -439,7 +408,7 @@ void Render::LoadModel(const Model &model) {
             .m_FirstInstance = static_cast<GLuint>(meshes.size()),
         };
 
-        auto indices = std::vector<unsigned int>();
+        auto indices = std::vector<std::uint32_t>();
 
         indices.reserve(mesh.m_Indices.size());
 
@@ -449,9 +418,9 @@ void Render::LoadModel(const Model &model) {
 
         auto &vertices = mesh.m_Vertices;
 
-        drawIndirectBuffer->SetData(drawIndirectCommand, meshes.size());
-        indexBuffer->SetData(indices, indexOffset);
-        vertexBuffer->SetData(vertices, vertexOffset);
+        drawIndirectBuffer->Upload(drawIndirectCommand, meshes.size());
+        indexBuffer->Upload(indices, indexOffset);
+        vertexBuffer->Upload(vertices, vertexOffset);
 
         indexOffset += indices.size();
         vertexOffset += vertices.size();
@@ -459,17 +428,17 @@ void Render::LoadModel(const Model &model) {
         meshes.push_back(std::make_tuple(indexOffset, indices.size()));
     }
 
-    m_DiffuseTexture2DArray = diffuseTexture2DArray;
-    m_DrawIndirectBuffer = drawIndirectBuffer;
-    m_IndexBuffer = indexBuffer;
-    m_LightEnvironmentBuffer = lightEnvironmentBuffer;
-    m_LightPointBuffer = lightPointBuffer;
-    m_MaterialBuffer = materialBuffer;
-    m_Meshes = meshes;
-    m_MetalnessTexture2DArray = metalnessTexture2DArray;
-    m_NormalTexture2DArray = normalTexture2DArray;
-    m_RoughnessTexture2DArray = roughnessTexture2DArray;
-    m_VertexBuffer = vertexBuffer;
+    m_DiffuseTexture2DArray = std::move(diffuseTexture2DArray);
+    m_DrawIndirectBuffer = std::move(drawIndirectBuffer);
+    m_IndexBuffer = std::move(indexBuffer);
+    m_LightEnvironmentBuffer = std::move(lightEnvironmentBuffer);
+    m_LightPointBuffer = std::move(lightPointBuffer);
+    m_MaterialBuffer = std::move(materialBuffer);
+    m_Meshes = std::move(meshes);
+    m_MetalnessTexture2DArray = std::move(metalnessTexture2DArray);
+    m_NormalTexture2DArray = std::move(normalTexture2DArray);
+    m_RoughnessTexture2DArray = std::move(roughnessTexture2DArray);
+    m_VertexBuffer = std::move(vertexBuffer);
 }
 
 void Render::Update() {
@@ -487,100 +456,105 @@ void Render::Update() {
         }
     }
 
-    // Update camera
-    assert(g_Camera);
+    auto cameraUploadData = std::vector<GpuCamera>();
+    auto lightEnvironmentUploadData = std::vector<GpuLightEnvironment>();
+    auto lightPointUploadData = std::vector<GpuLightPoint>();
+    auto numLightPointShadows = 0u;
 
-    static glm::mat4 cameraLastView = glm::identity<glm::mat4>();
+    if (g_Camera) {
+        static glm::mat4 lastView = glm::identity<glm::mat4>();
 
-    const auto cameraProjection = g_Camera->Projection(m_EnableReverseZ);
-    const auto cameraProjectionNonReversed = m_EnableReverseZ ? g_Camera->Projection(false) : cameraProjection;
-    const auto cameraFovY = glm::radians(g_Camera->m_FovY);
-    const auto cameraHalfFovY = cameraFovY * 0.5f;
-    const auto cameraV = glm::tan(cameraHalfFovY);
-    const auto cameraH = g_Camera->m_AspectRatio * cameraV;
-    const auto cameraHalfFovX = glm::atan(cameraH);
-    const auto cameraFovX = cameraHalfFovX * 2.f;
-    const auto cameraView = g_Camera->View();
-    const auto cameraNormTileDim = glm::vec2(1.f / static_cast<float>(GRID_SIZE_X), 1.f / static_cast<float>(GRID_SIZE_Y));
-    const auto cameraTileSizeInv = glm::vec2(1.f / (g_Window->m_ScreenWidth * cameraNormTileDim.x), 1.f / (g_Window->m_ScreenHeight * cameraNormTileDim.y));
-    const auto cameraSliceBiasFactor = -((static_cast<float>(GRID_SIZE_Z) * std::log2(g_Camera->m_NearZ)) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ));
-    const auto cameraSliceScalingFactor = static_cast<float>(GRID_SIZE_Z) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ);
+        const auto projection = g_Camera->Projection(m_EnableReverseZ);
+        const auto projectionNonReversed = m_EnableReverseZ ? g_Camera->Projection(false) : projection;
+        const auto fovY = glm::radians(g_Camera->m_FovY);
+        const auto halfFovY = fovY * 0.5f;
+        const auto v = glm::tan(halfFovY);
+        const auto h = g_Camera->m_AspectRatio * v;
+        const auto halfFovX = glm::atan(h);
+        const auto fovX = halfFovX * 2.f;
+        const auto view = g_Camera->View();
+        const auto normTileDim = glm::vec2(1.f / static_cast<float>(GRID_SIZE_X), 1.f / static_cast<float>(GRID_SIZE_Y));
+        const auto tileSizeInv = glm::vec2(1.f / (g_Window->m_ScreenWidth * normTileDim.x), 1.f / (g_Window->m_ScreenHeight * normTileDim.y));
+        const auto sliceBiasFactor = -((static_cast<float>(GRID_SIZE_Z) * std::log2(g_Camera->m_NearZ)) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ));
+        const auto sliceScalingFactor = static_cast<float>(GRID_SIZE_Z) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ);
 
-    auto gpuCamera = GpuCamera {
-        .m_LastView = cameraLastView,
-        .m_Projection = cameraProjection,
-        .m_ProjectionInversed = glm::inverse(cameraProjection),
-        .m_ProjectionNonReversed = cameraProjectionNonReversed,
-        .m_ProjectionNonReversedInversed = glm::inverse(cameraProjectionNonReversed),
-        .m_View = cameraView,
-        .m_Position = g_Camera->m_Position,
-        .m_NormTileDim = cameraNormTileDim,
-        .m_TileSizeInv = cameraTileSizeInv,
-        .m_FarZ = g_Camera->m_FarZ,
-        .m_NearZ = g_Camera->m_NearZ,
-        .m_FovX = cameraFovX,
-        .m_FovY = cameraFovY,
-        .m_SliceBiasFactor = cameraSliceBiasFactor,
-        .m_SliceScalingFactor = cameraSliceScalingFactor,
-    };
+        cameraUploadData.push_back(GpuCamera {
+            .m_LastView = lastView,
+            .m_Projection = projection,
+            .m_ProjectionInversed = glm::inverse(projection),
+            .m_ProjectionNonReversed = projectionNonReversed,
+            .m_ProjectionNonReversedInversed = glm::inverse(projectionNonReversed),
+            .m_View = view,
+            .m_Position = g_Camera->m_Position,
+            .m_NormTileDim = normTileDim,
+            .m_TileSizeInv = tileSizeInv,
+            .m_FarZ = g_Camera->m_FarZ,
+            .m_NearZ = g_Camera->m_NearZ,
+            .m_FovX = fovX,
+            .m_FovY = fovY,
+            .m_SliceBiasFactor = sliceBiasFactor,
+            .m_SliceScalingFactor = sliceScalingFactor,
+        });
 
-    cameraLastView = std::move(cameraView);
+        lastView = std::move(view);
+    }
 
-    m_CameraBuffer->SetData(gpuCamera, 0);
-
-    if (g_LightEnvironment && m_LightEnvironmentBuffer) {
+    if (g_LightEnvironment) {
         auto cascadeLevels = std::array<float, 4> {
             g_Camera->m_FarZ * 1.f / 80.f,
             g_Camera->m_FarZ * 1.f / 40.f,
             g_Camera->m_FarZ * 1.f / 20.f,
             g_Camera->m_FarZ * 1.f / 10.f,
         };
-        auto gpuLightEnvironment = GpuLightEnvironment {
+
+        lightEnvironmentUploadData.push_back(GpuLightEnvironment {
             .m_CascadeViewProjections = g_LightEnvironment->CascadeViewProjections(*g_Camera, cascadeLevels, m_EnableReverseZ),
             .m_CascadePlaneDistances = cascadeLevels,
             .m_AmbientColor = g_LightEnvironment->m_AmbientColor,
             .m_BaseColor = g_LightEnvironment->m_BaseColor,
             .m_Direction = g_LightEnvironment->Forward(),
-        };
-
-        m_LightEnvironmentBuffer->SetData(gpuLightEnvironment, 0);
+        });
     }
 
-    m_LightCounterBuffer->SetData(0, 0);
+    for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHT_POINTS); i++) {
+        const auto &lightPoint = g_LightPoints[i];
 
-    auto numLightPointShadows = 0u;
+        lightPointUploadData.push_back(GpuLightPoint {
+            .m_ViewProjections = lightPoint->ViewProjections(m_EnableReverseZ),
+            .m_Position = lightPoint->m_Position,
+            .m_Radius = lightPoint->m_Radius,
+            .m_BaseColor = lightPoint->m_BaseColor,
+            .m_ShadowIndex = lightPoint->m_CastShadows ? static_cast<std::int32_t>(numLightPointShadows) : -1,
+        });
 
-    if (m_LightPointBuffer) {
-        for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHTPOINTS); i++) {
-            const auto &lightPoint = g_LightPoints[i];
-
-            const auto gpuLightPoint = GpuLightPoint {
-                .m_ViewProjections = lightPoint->ViewProjections(m_EnableReverseZ),
-                .m_Position = lightPoint->m_Position,
-                .m_Radius = lightPoint->m_Radius,
-                .m_BaseColor = lightPoint->m_BaseColor,
-                .m_ShadowIndex = lightPoint->m_CastShadows ? static_cast<int>(numLightPointShadows) : -1,
-            };
-
-            m_LightPointBuffer->SetData(gpuLightPoint, i);
-
-            if (lightPoint->m_CastShadows) {
-                numLightPointShadows++;
-            }
+        if (lightPoint->m_CastShadows) {
+            numLightPointShadows++;
         }
     }
+    
+    assert(m_CameraBuffer);
+    assert(m_LightCounterBuffer);
+    assert(m_LightEnvironmentBuffer);
+    assert(m_LightPointBuffer);
 
-    if (!m_ShadowCubeColorTextureCubeArray || m_ShadowCubeColorTextureCubeArray->m_Depth < numLightPointShadows * 6) {
-        const auto layers = std::max(numLightPointShadows * 6lu, 6lu);
-        const auto size = SHADOW_CUBE_SIZE;
+    m_CameraBuffer->Upload(cameraUploadData, 0);
+    m_LightCounterBuffer->Upload(0, 0);
+    m_LightEnvironmentBuffer->Upload(lightEnvironmentUploadData, 0);
+    m_LightPointBuffer->Upload(lightPointUploadData, 0);
 
-        m_ShadowCubeColorTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_R16);
+    // Recreate shadow cubes
+    assert(m_ShadowCubeColorTextureCubeArray);
+
+    if (m_ShadowCubeColorTextureCubeArray->m_Extent.z < numLightPointShadows * 6) {
+        const auto extent = glm::uvec3(glm::uvec2(SHADOW_CUBE_SIZE), std::max(numLightPointShadows * 6lu, 6lu));
+
+        m_ShadowCubeColorTextureCubeArray = std::make_unique<const TextureCubeArray>(extent, 1, GL_R16);
         m_ShadowCubeColorTextureViewCubes.clear();
     
         while (m_ShadowCubeColorTextureViewCubes.size() < std::max(numLightPointShadows, 1u)) {
             m_ShadowCubeColorTextureViewCubes.push_back(
-                std::make_shared<TextureViewCube>(
-                    m_ShadowCubeColorTextureCubeArray, 
+                std::make_unique<const TextureViewCube>(
+                    m_ShadowCubeColorTextureCubeArray.get(), 
                     0, 
                     1, 
                     m_ShadowCubeColorTextureViewCubes.size() * 6
@@ -589,17 +563,18 @@ void Render::Update() {
         }
     }
 
-    if (!m_ShadowCubeDepthTextureCubeArray || m_ShadowCubeDepthTextureCubeArray->m_Depth < numLightPointShadows * 6) {
-        const auto layers = std::max(numLightPointShadows * 6lu, 6lu);
-        const auto size = SHADOW_CUBE_SIZE;
+    assert(m_ShadowCubeDepthTextureCubeArray);
 
-        m_ShadowCubeDepthTextureCubeArray = std::make_shared<TextureCubeArray>(size, size, layers, 1, GL_DEPTH_COMPONENT16);
+    if (m_ShadowCubeDepthTextureCubeArray->m_Extent.z < numLightPointShadows * 6) {
+        const auto extent = glm::uvec3(glm::uvec2(SHADOW_CUBE_SIZE), std::max(numLightPointShadows * 6lu, 6lu));
+
+        m_ShadowCubeDepthTextureCubeArray = std::make_unique<TextureCubeArray>(extent, 1, GL_DEPTH_COMPONENT16);
         m_ShadowCubeDepthTextureViewCubes.clear();
 
         while (m_ShadowCubeDepthTextureViewCubes.size() < std::max(numLightPointShadows, 1u)) {
             m_ShadowCubeDepthTextureViewCubes.push_back(
-                std::make_shared<TextureViewCube>(
-                    m_ShadowCubeDepthTextureCubeArray,
+                std::make_unique<const TextureViewCube>(
+                    m_ShadowCubeDepthTextureCubeArray.get(),
                     0,
                     1,
                     m_ShadowCubeDepthTextureViewCubes.size() * 6
@@ -630,47 +605,39 @@ void Render::Update() {
     m_NumFrames++;
 }
 
-void Render::ShadowCsmPass() {
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-
-    glCullFace(GL_BACK);
-    glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
-    glDepthMask(true);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glFrontFace(GL_CCW);
-
-    glScissor(0, 0, m_ShadowCsmColorTexture2DArray->m_Width, m_ShadowCsmColorTexture2DArray->m_Height);
-    glViewport(0, 0, m_ShadowCsmColorTexture2DArray->m_Width, m_ShadowCsmColorTexture2DArray->m_Height);
-
+void Render::ShadowCsmPass() {;
     assert(m_ShadowCsmFramebuffer);
     assert(m_ShadowCsmShaderProgram);
 
     m_ShadowCsmFramebuffer->Bind();
-    m_ShadowCsmFramebuffer->ClearColor(0, 0.f, 0.f, 0.f, 1.f);
-    m_ShadowCsmFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
     m_ShadowCsmShaderProgram->Use();
 
-    if (!m_DrawIndirectBuffer) {
-        return;
-    }
-    if (!m_IndexBuffer) {
-        return;
-    }
-    if (!m_LightEnvironmentBuffer) {
-        return;
-    }
-    if (!m_VertexBuffer) {
-        return;
-    }
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glCullFace(GL_BACK);
+    glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
+    glDepthMask(true);
+    glFrontFace(GL_CCW);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glScissor(0, 0, m_ShadowCsmColorTexture2DArray->m_Extent.x, m_ShadowCsmColorTexture2DArray->m_Extent.y);
+    glViewport(0, 0, m_ShadowCsmColorTexture2DArray->m_Extent.x, m_ShadowCsmColorTexture2DArray->m_Extent.y);
 
-    m_DrawIndirectBuffer->Bind();
+    m_ShadowCsmFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCsmColorTexture2DArray.get());
+    m_ShadowCsmFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_ShadowCsmDepthTexture2DArray.get());
+    m_ShadowCsmFramebuffer->ClearColor(0, m_EnableReverseZ ? glm::vec4(0.f) : glm::vec4(1.f));
+    m_ShadowCsmFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
 
-    m_IndexBuffer->Bind(0);
-    m_LightEnvironmentBuffer->Bind(1);
-    m_VertexBuffer->Bind(2);
+    assert(m_DrawIndirectBuffer);
+    assert(m_IndexBuffer);
+    assert(m_LightEnvironmentBuffer);
+    assert(m_VertexBuffer);
 
-    for (auto i = 0u; i < m_ShadowCsmColorTexture2DArray->m_Depth; i++) {
+    m_DrawIndirectBuffer->BindIndirect();
+    m_IndexBuffer->BindStorage(0);
+    m_LightEnvironmentBuffer->BindStorage(1);
+    m_VertexBuffer->BindStorage(2);
+
+    for (auto i = 0u; i < m_ShadowCsmColorTexture2DArray->m_Extent.z; i++) {
         glUniform1ui(0, i);
 
         glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
@@ -684,47 +651,38 @@ void Render::ShadowCubePass() {
     m_ShadowCubeFramebuffer->Bind();
     m_ShadowCubeShaderProgram->Use();
 
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
     glCullFace(GL_BACK);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(true);
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
     glFrontFace(GL_CCW);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glScissor(0, 0, m_ShadowCubeColorTextureCubeArray->m_Width, m_ShadowCubeColorTextureCubeArray->m_Height);
-    glViewport(0, 0, m_ShadowCubeColorTextureCubeArray->m_Width, m_ShadowCubeColorTextureCubeArray->m_Height);
+    glScissor(0, 0, m_ShadowCubeColorTextureCubeArray->m_Extent.x, m_ShadowCubeColorTextureCubeArray->m_Extent.y);
+    glViewport(0, 0, m_ShadowCubeColorTextureCubeArray->m_Extent.x, m_ShadowCubeColorTextureCubeArray->m_Extent.y);
 
-    if (!m_DrawIndirectBuffer) {
-        return;
-    }
-    if (!m_IndexBuffer) {
-        return;
-    }
-    if (!m_LightPointBuffer) {
-        return;
-    }
-    if (!m_VertexBuffer) {
-        return;
-    }
+    assert(m_DrawIndirectBuffer);
+    assert(m_IndexBuffer);
+    assert(m_LightPointBuffer);
+    assert(m_VertexBuffer);
 
-    m_DrawIndirectBuffer->Bind();
+    m_DrawIndirectBuffer->BindIndirect();
+    m_IndexBuffer->BindStorage(0);
+    m_LightPointBuffer->BindStorage(1);
+    m_VertexBuffer->BindStorage(2);
 
-    m_IndexBuffer->Bind(0);
-    m_LightPointBuffer->Bind(1);
-    m_VertexBuffer->Bind(2);
+    auto numLightPointShadows = 0u;
 
-    auto numLightPointShadows = 0;
-
-    for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHTPOINTS); i++) {
+    for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHT_POINTS); i++) {
         const auto &lightPoint = g_LightPoints[i];
 
         if (!lightPoint->m_CastShadows) {
             continue;
         }
 
-        m_ShadowCubeFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCubeColorTextureViewCubes.at(numLightPointShadows));
-        m_ShadowCubeFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_ShadowCubeDepthTextureViewCubes.at(numLightPointShadows));
-        m_ShadowCubeFramebuffer->ClearColor(0, 1.f, 1.f, 1.f, 1.f);
+        m_ShadowCubeFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_ShadowCubeColorTextureViewCubes.at(numLightPointShadows).get());
+        m_ShadowCubeFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_ShadowCubeDepthTextureViewCubes.at(numLightPointShadows).get());
+        m_ShadowCubeFramebuffer->ClearColor(0, glm::vec4(1.f));
         m_ShadowCubeFramebuffer->ClearDepth(0, 1.f);
 
         glUniform1ui(1, i);
@@ -740,63 +698,60 @@ void Render::ShadowCubePass() {
 }
 
 void Render::DepthPass() {
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-
-    glCullFace(GL_BACK);
-    glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
-    glDepthMask(true);
-    glPolygonMode(GL_FRONT_AND_BACK, m_EnableWireframeMode ? GL_LINE : GL_FILL);
-    glFrontFace(GL_CCW);
-
-    glScissor(0, 0, m_DepthTexture2D->m_Width, m_DepthTexture2D->m_Height);
-    glViewport(0, 0, m_DepthTexture2D->m_Width, m_DepthTexture2D->m_Height);
-
     assert(m_DepthFramebuffer);
     assert(m_DepthShaderProgram);
 
     m_DepthFramebuffer->Bind();
-    m_DepthFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
-
-    if (m_CameraBuffer) {
-        m_CameraBuffer->Bind(0);
-    }
-    if (m_IndexBuffer) {
-        m_IndexBuffer->Bind(1);
-    }
-    if (m_VertexBuffer) {
-        m_VertexBuffer->Bind(2);
-    }
-
     m_DepthShaderProgram->Use();
 
-    if (m_DrawIndirectBuffer) {
-        m_DrawIndirectBuffer->Bind();
+    assert(m_DepthTexture2D);
 
-        glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
-    }
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glCullFace(GL_BACK);
+    glDepthFunc(m_EnableReverseZ ? GL_GEQUAL : GL_LEQUAL);
+    glDepthMask(true);
+    glFrontFace(GL_CCW);
+    glPolygonMode(GL_FRONT_AND_BACK, m_EnableWireframeMode ? GL_LINE : GL_FILL);
+    glScissor(0, 0, m_DepthTexture2D->m_Extent.x, m_DepthTexture2D->m_Extent.y);
+    glViewport(0, 0, m_DepthTexture2D->m_Extent.x, m_DepthTexture2D->m_Extent.y);
+
+    m_DepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_DepthTexture2D.get());
+    m_DepthFramebuffer->ClearDepth(0, m_EnableReverseZ ? 0.f : 1.f);
+
+    assert(m_CameraBuffer);
+    assert(m_DrawIndirectBuffer);
+    assert(m_IndexBuffer);
+    assert(m_VertexBuffer);
+
+    m_DrawIndirectBuffer->BindIndirect();
+    m_CameraBuffer->BindStorage(0);
+    m_IndexBuffer->BindStorage(1);
+    m_VertexBuffer->BindStorage(2);
+
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
 }
 
 void Render::DownsampleDepthPass() {
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-
-    glDepthFunc(GL_ALWAYS);
-    glDepthMask(true);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glFrontFace(GL_CCW);
-
-    assert(m_DepthTexture2D);
     assert(m_DownsampleDepthFramebuffer);
     assert(m_DownsampleDepthShaderProgram);
 
     m_DownsampleDepthFramebuffer->Bind();
     m_DownsampleDepthShaderProgram->Use();
+    
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(true);
+    glFrontFace(GL_CCW);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
     glUniform1i(0, m_EnableReverseZ);
 
-    auto height = m_DepthTexture2D->m_Height;
-    auto width = m_DepthTexture2D->m_Width;
+    assert(m_DepthTexture2D);
+
+    auto height = m_DepthTexture2D->m_Extent.y;
+    auto width = m_DepthTexture2D->m_Extent.x;
 
     for (auto i = 0u; i < m_DepthTexture2D->m_MipLevel - 1; i++) {
         width /= 2;
@@ -805,9 +760,9 @@ void Render::DownsampleDepthPass() {
         glScissor(0, 0, width, height);
         glViewport(0, 0, width, height);
 
-        m_DownsampleDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_DepthTextureView2Ds.at(i + 1));
+        m_DownsampleDepthFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_DepthTextureView2Ds.at(i + 1).get());
 
-        m_DepthTextureView2Ds.at(i + 0)->Bind(0, m_SamplerClamp);
+        m_DepthTextureView2Ds.at(i + 0)->Bind(0, m_SamplerClamp.get());
 
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
@@ -816,37 +771,34 @@ void Render::DownsampleDepthPass() {
 void Render::AmbientOcclusionPass() {
     assert(m_AmbientOcclusionFramebuffer);
     assert(m_AmbientOcclusionShaderProgram);
-    assert(m_AmbientOcclusionTexture2D);
 
     m_AmbientOcclusionFramebuffer->Bind();
-    m_AmbientOcclusionFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionTexture2D);
     m_AmbientOcclusionShaderProgram->Use();
 
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glScissor(0, 0, m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
-    glViewport(0, 0, m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
+    glScissor(0, 0, m_AmbientOcclusionTexture2D->m_Extent.x, m_AmbientOcclusionTexture2D->m_Extent.y);
+    glViewport(0, 0, m_AmbientOcclusionTexture2D->m_Extent.x, m_AmbientOcclusionTexture2D->m_Extent.y);
 
-    if (m_CameraBuffer) {
-        m_CameraBuffer->Bind(0);
-    }
+    m_AmbientOcclusionFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionTexture2D.get());
 
-    m_DepthTextureView2Ds.at(0)->Bind(0, m_SamplerClamp);
+    assert(m_CameraBuffer);
 
-    auto screenSize = glm::vec2(m_AmbientOcclusionTexture2D->m_Width, m_AmbientOcclusionTexture2D->m_Height);
-    auto screenSizeInv = glm::vec2(1.f / m_AmbientOcclusionTexture2D->m_Width, 1.f / m_AmbientOcclusionTexture2D->m_Height);
+    m_CameraBuffer->BindStorage(0);
 
-    constexpr std::array<float, 4> offsets = { 0.0f, 0.5f, 0.25f, 0.75f };
-    constexpr std::array<float, 6> rotations = { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
+    m_DepthTextureView2Ds.at(0)->Bind(0, m_SamplerClamp.get());
+
+    constexpr auto OFFSETS = std::array<float, 4> { 0.0f, 0.5f, 0.25f, 0.75f };
+    constexpr auto ROTATIONS = std::array<float, 6> { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
 
     glUniform1f(0, m_AmbientOcclusionFalloffFar);
     glUniform1f(1, m_AmbientOcclusionFalloffNear);
     glUniform1ui(2, std::max(m_AmbientOcclusionNumSamples, 1));
     glUniform1ui(3, std::max(m_AmbientOcclusionNumSlices, 1));
-    glUniform1f(4, offsets[m_NumFrames / 6 % offsets.size()]);
+    glUniform1f(4, OFFSETS[m_NumFrames / 6 % OFFSETS.size()]);
     glUniform1f(5, m_AmbientOcclusionRadius);
-    glUniform1f(6, rotations[m_NumFrames % 6] / 360.f);
+    glUniform1f(6, ROTATIONS[m_NumFrames % 6] / 360.f);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -854,26 +806,26 @@ void Render::AmbientOcclusionPass() {
 void Render::AmbientOcclusionSpartialPass() {
     assert(m_AmbientOcclusionSpartialFramebuffer);
     assert(m_AmbientOcclusionSpartialShaderProgram);
-    assert(m_AmbientOcclusionSpartialTexture2D);
+
+    m_AmbientOcclusionSpartialFramebuffer->Bind();
+    m_AmbientOcclusionSpartialShaderProgram->Use();
 
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glScissor(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Width, m_AmbientOcclusionSpartialTexture2D->m_Height);
-    glViewport(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Width, m_AmbientOcclusionSpartialTexture2D->m_Height);
+    glScissor(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Extent.x, m_AmbientOcclusionSpartialTexture2D->m_Extent.y);
+    glViewport(0, 0, m_AmbientOcclusionSpartialTexture2D->m_Extent.x, m_AmbientOcclusionSpartialTexture2D->m_Extent.y);
 
-    m_AmbientOcclusionSpartialFramebuffer->Bind();
-    m_AmbientOcclusionSpartialFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionSpartialTexture2D);
-    m_AmbientOcclusionSpartialShaderProgram->Use();
+    m_AmbientOcclusionSpartialFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionSpartialTexture2D.get());
 
-    if (m_CameraBuffer) {
-        m_CameraBuffer->Bind(0);
-    }
+    assert(m_CameraBuffer);
+
+    m_CameraBuffer->BindStorage(0);
 
     assert(m_AmbientOcclusionTexture2D);
 
-    m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp);
-    m_DepthTextureView2Ds.at(0)->Bind(1, m_SamplerClamp);
+    m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp.get());
+    m_DepthTextureView2Ds.at(0)->Bind(1, m_SamplerClamp.get());
 
     glUniform1i(0, m_EnableReverseZ);
 
@@ -883,30 +835,30 @@ void Render::AmbientOcclusionSpartialPass() {
 void Render::AmbientOcclusionTemporalPass() {
     assert(m_AmbientOcclusionTemporalFramebuffer);
     assert(m_AmbientOcclusionTemporalShaderProgram);
-    assert(m_AmbientOcclusionTemporalTexture2D);
+
+    m_AmbientOcclusionTemporalFramebuffer->Bind();
+    m_AmbientOcclusionTemporalShaderProgram->Use();
 
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glScissor(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
-    glViewport(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Width, m_AmbientOcclusionTemporalTexture2D->m_Height);
+    glScissor(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Extent.x, m_AmbientOcclusionTemporalTexture2D->m_Extent.y);
+    glViewport(0, 0, m_AmbientOcclusionTemporalTexture2D->m_Extent.x, m_AmbientOcclusionTemporalTexture2D->m_Extent.y);
+    
+    m_AmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionTemporalTexture2D.get());
 
-    m_AmbientOcclusionTemporalFramebuffer->Bind();
-    m_AmbientOcclusionTemporalFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_AmbientOcclusionTemporalTexture2D);
-    m_AmbientOcclusionTemporalShaderProgram->Use();
+    assert(m_CameraBuffer);
 
-    if (m_CameraBuffer) {
-        m_CameraBuffer->Bind(0);
-    }
+    m_CameraBuffer->BindStorage(0);
 
     assert(m_AmbientOcclusionSpartialTexture2D);
     assert(m_LastAmbientOcclusionTemporalTexture2D);
 
-    m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp);
-    m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp);
-    m_LastAmbientOcclusionTemporalTexture2D->Bind(2, m_SamplerClamp);
-    m_LastDepthTextureView2Ds.at(1)->Bind(3, m_SamplerClamp);
-
+    m_AmbientOcclusionSpartialTexture2D->Bind(0, m_SamplerClamp.get());
+    m_DepthTextureView2Ds.at(1)->Bind(1, m_SamplerClamp.get());
+    m_LastAmbientOcclusionTemporalTexture2D->Bind(2, m_SamplerClamp.get());
+    m_LastDepthTextureView2Ds.at(1)->Bind(3, m_SamplerClamp.get());
+   
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
@@ -915,15 +867,11 @@ void Render::ClusterPass() {
     
     m_ClusterShaderProgram->Use();
 
-    if (!m_CameraBuffer) {
-        return;
-    }
-    if (!m_ClusterBuffer) {
-        return;
-    }
+    assert(m_CameraBuffer);
+    assert(m_ClusterBuffer);
 
-    m_CameraBuffer->Bind(0);
-    m_ClusterBuffer->Bind(1);
+    m_CameraBuffer->BindStorage(0);
+    m_ClusterBuffer->BindStorage(1);
 
     glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -934,166 +882,128 @@ void Render::LightCullingPass() {
     
     m_LightCullingShaderProgram->Use();
 
-    if (!m_CameraBuffer) {
-        return;
-    }
-    if (!m_ClusterBuffer) {
-        return;
-    }
-    if (!m_LightCounterBuffer) {
-        return;
-    }
-    if (!m_LightGridBuffer) {
-        return;
-    }
-    if (!m_LightIndexBuffer) {
-        return;
-    }
-    if (!m_LightPointBuffer) {
-        return;
-    }
+    assert(m_CameraBuffer);
+    assert(m_ClusterBuffer);
+    assert(m_LightCounterBuffer);
+    assert(m_LightGridBuffer);
+    assert(m_LightIndexBuffer);
+    assert(m_LightPointBuffer);
 
-    m_CameraBuffer->Bind(0);
-    m_ClusterBuffer->Bind(1);
-    m_LightCounterBuffer->Bind(2);
-    m_LightGridBuffer->Bind(3);
-    m_LightIndexBuffer->Bind(4);
-    m_LightPointBuffer->Bind(5);
+    m_CameraBuffer->BindStorage(0);
+    m_ClusterBuffer->BindStorage(1);
+    m_LightCounterBuffer->BindStorage(2);
+    m_LightGridBuffer->BindStorage(3);
+    m_LightIndexBuffer->BindStorage(4);
+    m_LightPointBuffer->BindStorage(5);
 
-    glUniform1ui(0, std::min(g_LightPoints.size(), MAX_LIGHTPOINTS));
+    glUniform1ui(0, g_LightPoints.size());
 
     glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 }
 
 void Render::LightingPass() {
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-
-    glCullFace(GL_BACK);
-    glDepthFunc(GL_EQUAL);
-    glDepthMask(false);
-    glPolygonMode(GL_FRONT_AND_BACK, m_EnableWireframeMode ? GL_LINE : GL_FILL);
-    glFrontFace(GL_CCW);
-
-    glScissor(0, 0, m_LightingTexture2D->m_Width, m_LightingTexture2D->m_Height);
-    glViewport(0, 0, m_LightingTexture2D->m_Width, m_LightingTexture2D->m_Height);
-
     assert(m_LightingFramebuffer);
     assert(m_LightingShaderProgram);
 
     m_LightingFramebuffer->Bind();
-    m_LightingFramebuffer->ClearColor(0, 0.f, 0.f, 0.f, 1.f);
+    m_LightingShaderProgram->Use();
 
-    if (!m_CameraBuffer) {
-        return;
-    }
-    if (!m_IndexBuffer) {
-        return;
-    }
-    if (!m_LightEnvironmentBuffer) {
-        return;
-    }
-    if (!m_LightGridBuffer) {
-        return;
-    }
-    if (!m_LightIndexBuffer) {
-        return;
-    }
-    if (!m_LightPointBuffer) {
-        return;
-    }
-    if (!m_MaterialBuffer) {
-        return;
-    }
-    if (!m_VertexBuffer) {
-        return;
-    }
+    assert(m_LightingTexture2D);
 
-    m_CameraBuffer->Bind(0);
-    m_IndexBuffer->Bind(1);
-    m_LightEnvironmentBuffer->Bind(2);
-    m_LightGridBuffer->Bind(3);
-    m_LightIndexBuffer->Bind(4);
-    m_LightPointBuffer->Bind(5);
-    m_MaterialBuffer->Bind(6);
-    m_VertexBuffer->Bind(7);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glCullFace(GL_BACK);
+    glDepthFunc(GL_EQUAL);
+    glDepthMask(false);
+    glFrontFace(GL_CCW);
+    glPolygonMode(GL_FRONT_AND_BACK, m_EnableWireframeMode ? GL_LINE : GL_FILL);
+    glScissor(0, 0, m_LightingTexture2D->m_Extent.x, m_LightingTexture2D->m_Extent.y);
+    glViewport(0, 0, m_LightingTexture2D->m_Extent.x, m_LightingTexture2D->m_Extent.y);
+
+    assert(m_DepthTexture2D);
+
+    m_LightingFramebuffer->SetAttachment(GL_COLOR_ATTACHMENT0, m_LightingTexture2D.get());
+    m_LightingFramebuffer->SetAttachment(GL_DEPTH_ATTACHMENT, m_DepthTexture2D.get());
+    m_LightingFramebuffer->ClearColor(0, glm::vec4(glm::vec3(0.f), 1.f));
+
+    assert(m_CameraBuffer);
+    assert(m_IndexBuffer);
+    assert(m_LightEnvironmentBuffer);
+    assert(m_LightGridBuffer);
+    assert(m_LightIndexBuffer);
+    assert(m_LightPointBuffer);
+    assert(m_MaterialBuffer);
+    assert(m_VertexBuffer);
+
+    m_DrawIndirectBuffer->BindIndirect();
+    m_CameraBuffer->BindStorage(0);
+    m_IndexBuffer->BindStorage(1);
+    m_LightEnvironmentBuffer->BindStorage(2);
+    m_LightGridBuffer->BindStorage(3);
+    m_LightIndexBuffer->BindStorage(4);
+    m_LightPointBuffer->BindStorage(5);
+    m_MaterialBuffer->BindStorage(6);
+    m_VertexBuffer->BindStorage(7);
 
     assert(m_AmbientOcclusionTemporalTexture2D);
-
-    m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp);
-
-    if (m_DiffuseTexture2DArray) {
-        m_DiffuseTexture2DArray->Bind(1, m_SamplerWrap);
-    }
-    if (m_MetalnessTexture2DArray) {
-        m_MetalnessTexture2DArray->Bind(2, m_SamplerWrap);
-    }
-    if (m_NormalTexture2DArray) {
-        m_NormalTexture2DArray->Bind(3, m_SamplerWrap);
-    }
-    if (m_RoughnessTexture2DArray) {
-        m_RoughnessTexture2DArray->Bind(4, m_SamplerWrap);
-    }
-
+    assert(m_DiffuseTexture2DArray);
+    assert(m_MetalnessTexture2DArray);
+    assert(m_NormalTexture2DArray);
+    assert(m_RoughnessTexture2DArray);
     assert(m_ShadowCsmColorTexture2DArray);
     assert(m_ShadowCsmDepthTexture2DArray);
+    assert(m_ShadowCubeColorTextureCubeArray);
+    assert(m_ShadowCubeDepthTextureCubeArray);
 
-    m_ShadowCsmColorTexture2DArray->Bind(5, m_SamplerBorderWhite);
-    m_ShadowCsmDepthTexture2DArray->Bind(6, m_SamplerBorderWhite);
-
-    if (m_ShadowCubeColorTextureCubeArray) {
-        m_ShadowCubeColorTextureCubeArray->Bind(7, m_SamplerClamp);  
-    }
-    if (m_ShadowCubeDepthTextureCubeArray) {
-        m_ShadowCubeDepthTextureCubeArray->Bind(8, m_SamplerClamp);  
-    }
-
-    m_LightingShaderProgram->Use();
+    m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp.get());
+    m_DiffuseTexture2DArray->Bind(1, m_SamplerWrap.get());
+    m_MetalnessTexture2DArray->Bind(2, m_SamplerWrap.get());
+    m_NormalTexture2DArray->Bind(3, m_SamplerWrap.get());
+    m_RoughnessTexture2DArray->Bind(4, m_SamplerWrap.get());
+    m_ShadowCsmColorTexture2DArray->Bind(5, m_SamplerBorderWhite.get());
+    m_ShadowCsmDepthTexture2DArray->Bind(6, m_SamplerBorderWhite.get());
+    m_ShadowCubeColorTextureCubeArray->Bind(7, m_SamplerClamp.get());  
+    m_ShadowCubeDepthTextureCubeArray->Bind(8, m_SamplerClamp.get());  
 
     glUniform1i(0, m_EnableAmbientOcclusion);
     glUniform1i(1, m_EnableReverseZ);
-    glUniform1ui(2, std::min(g_LightPoints.size(), MAX_LIGHTPOINTS));
+    glUniform1ui(2, g_LightPoints.size());
     glUniform1f(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
     glUniform1f(4, m_ShadowCsmVarianceMax);
     glUniform1f(5, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
     glUniform1f(6, m_ShadowCubeVarianceMax);
 
-    if (m_DrawIndirectBuffer) {
-        m_DrawIndirectBuffer->Bind();
-
-        glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
-    }
+    glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
 }
 
 void Render::ScreenPass() {
+    assert(m_ScreenShaderProgram);
+
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
-
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
     glScissor(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
     glViewport(0, 0, g_Window->m_ScreenWidth, g_Window->m_ScreenHeight);
 
-    assert(m_LightingTexture2D);
-    assert(m_ScreenFramebuffer);
-    assert(m_ScreenShaderProgram);
-
-    m_ScreenFramebuffer->Bind(); 
+    DefaultFramebuffer::Bind();
     m_ScreenShaderProgram->Use();
+
+    assert(m_AmbientOcclusionTemporalTexture2D);
+    assert(m_LightingTexture2D);
 
     switch (m_DrawFlags) {
         case DrawFlags::AmbientOcclusion:
-            m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp);
+            m_AmbientOcclusionTemporalTexture2D->Bind(0, m_SamplerClamp.get());
             break;
         case DrawFlags::Lighting:
-            m_LightingTexture2D->Bind(0, m_SamplerClamp);
+            m_LightingTexture2D->Bind(0, m_SamplerClamp.get());
             break;
         default:
             break;
     }
 
-    glUniform1ui(0, static_cast<unsigned int>(m_DrawFlags));
+    glUniform1ui(0, static_cast<std::uint32_t>(m_DrawFlags));
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }

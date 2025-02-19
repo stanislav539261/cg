@@ -11,7 +11,7 @@ ShaderProgram::~ShaderProgram() {
     glDeleteProgram(m_Handle);
 }
 
-bool ShaderProgram::Link(GLenum stage, const std::filesystem::path &filename) {
+bool ShaderProgram::Link(GLenum stage, const std::filesystem::path &filename) const {
     auto shader = glCreateShader(stage);
     auto file = std::ifstream(filename);
 
@@ -32,6 +32,6 @@ bool ShaderProgram::Link(GLenum stage, const std::filesystem::path &filename) {
     return true;
 }
 
-void ShaderProgram::Use() {
+void ShaderProgram::Use() const {
     glUseProgram(m_Handle);
 }

@@ -1,8 +1,6 @@
 #ifndef TEXTURE_HPP
 #define TEXTURE_HPP
 
-#include <vector>
-
 #include <GL/glew.h> 
 
 #include "sampler.hpp"
@@ -10,81 +8,110 @@
 
 class Texture {
 public:
-    void    Bind(GLuint);
-    void    Bind(GLuint, const std::shared_ptr<const Sampler> &);
-    void    GenerateMipMaps();
-    void    SetParameter(GLenum, GLfloat);
-    void    SetParameter(GLenum, GLuint);
-    void    SetParameter(GLenum, const glm::vec2 &);
-    void    SetParameter(GLenum, const glm::vec3 &);
-    void    SetParameter(GLenum, const glm::vec4 &);
+    virtual ~Texture() = default;
 
-    GLuint  m_Handle;
-    GLuint  m_MipLevel;
-    GLuint  m_Format;
-    GLenum  m_Target;
+    void            Bind(GLuint) const;
+    void            Bind(GLuint, const Sampler *) const;
+    void            GenerateMipMaps() const;
+    virtual bool    Is2D() const { return false; }
+    virtual bool    Is2DArray() const { return false; }
+    virtual bool    IsCube() const { return false; }
+    virtual bool    IsCubeArray() const { return false; }
+    void            SetParameter(GLenum, GLfloat) const;
+    void            SetParameter(GLenum, GLuint) const;
+    void            SetParameter(GLenum, const glm::vec2 &) const;
+    void            SetParameter(GLenum, const glm::vec3 &) const;
+    void            SetParameter(GLenum, const glm::vec4 &) const;
+    virtual GLenum  Target() const { return GL_NONE; }
+
+    glm::uvec3      m_Extent;
+    GLenum          m_Format;
+    GLuint          m_Handle;
+    GLuint          m_MipLevel;
+
+protected:
+    Texture() = default;
 };
 
 class Texture2D : public Texture {
 public:
-    Texture2D(GLuint, GLuint, GLuint, GLuint);
-    Texture2D(const Image &);
+    Texture2D(const glm::uvec2 &, GLuint, GLenum);
     ~Texture2D();
 
-    GLuint  m_Width;
-    GLuint  m_Height;
+    void    Copy(const Texture *, const glm::uvec2 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    Is2D() const override { return true; }
+    GLenum  Target() const override { return GL_TEXTURE_2D; }
+    void    Upload(const Image *, const glm::uvec2 &, GLuint) const;
 };
 
 class Texture2DArray : public Texture {
 public:
-    Texture2DArray(GLuint, GLuint, GLuint, GLuint, GLuint);
-    Texture2DArray(const std::vector<std::shared_ptr<Image>> &);
+    Texture2DArray(const glm::uvec3 &, GLuint, GLenum);
     ~Texture2DArray();
-    
-    GLuint  m_Width;
-    GLuint  m_Height;
-    GLuint  m_Depth;
+
+    void    Copy(const Texture *, const glm::uvec3 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    Is2DArray() const override { return true; }
+    GLenum  Target() const override { return GL_TEXTURE_2D_ARRAY; }
+    void    Upload(const Image *, const glm::uvec3 &, GLuint) const;
 };
 
 class TextureCube : public Texture {
 public:
-    TextureCube(GLuint, GLuint, GLuint, GLuint);
+    TextureCube(const glm::uvec2 &, GLuint, GLenum);
     ~TextureCube();
 
-    GLuint  m_Width;
-    GLuint  m_Height;
+    void    Copy(const Texture *, const glm::uvec3 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    IsCube() const override { return true; }
+    GLenum  Target() const override { return GL_TEXTURE_CUBE_MAP; }
+    void    Upload(const Image *, const glm::uvec3 &, GLuint) const;
 };
 
 class TextureCubeArray : public Texture {
 public:
-    TextureCubeArray(GLuint, GLuint, GLuint, GLuint, GLuint);
+    TextureCubeArray(const glm::uvec3 &, GLuint, GLenum);
     ~TextureCubeArray();
-    
-    GLuint  m_Width;
-    GLuint  m_Height;
-    GLuint  m_Depth;
+
+    void    Copy(const Texture *, const glm::uvec3 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    IsCubeArray() const override { return true; }
+    GLenum  Target() const override { return GL_TEXTURE_CUBE_MAP_ARRAY; }
+    void    Upload(const Image *, const glm::uvec3 &, GLuint) const;
 };
 
 class TextureView {
 public:
-    void    Bind(GLuint);
-    void    Bind(GLuint, const std::shared_ptr<const Sampler> &);
+    virtual ~TextureView() = default;
 
-    GLuint                          m_Handle;
-    GLenum                          m_Target;
-    std::shared_ptr<const Texture>  m_Texture;
+    void                Bind(GLuint) const;
+    void                Bind(GLuint, const Sampler *) const;
+    virtual bool        Is2D() const { return false; }
+    virtual bool        Is2DArray() const { return false; }
+    virtual bool        IsCube() const { return false; }
+    virtual bool        IsCubeArray() const { return false; }
+    virtual GLenum      Target() const { return GL_NONE; }
+
+    GLuint              m_Handle;
+    const Texture *     m_Texture;
+
+protected:
+    TextureView() = default;
 };
 
 class TextureView2D : public TextureView {
 public:
-    TextureView2D(std::shared_ptr<const Texture>, GLuint, GLuint, GLuint);
+    TextureView2D(const Texture *, GLuint, GLuint, GLuint);
     ~TextureView2D();
+
+    bool    Is2D() const override { return true; }
+    GLenum  Target() const override { return GL_TEXTURE_2D; }
 };
 
 class TextureViewCube : public TextureView {
 public:
-    TextureViewCube(std::shared_ptr<const Texture>, GLuint, GLuint, GLuint);
+    TextureViewCube(const Texture *, GLuint, GLuint, GLuint);
     ~TextureViewCube();
+
+    bool    IsCube() const override { return true; }
+    GLenum  Target() const override { return GL_TEXTURE_CUBE_MAP; }
 };
 
 #endif /* TEXTURE_HPP */

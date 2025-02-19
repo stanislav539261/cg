@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     g_Camera = std::make_shared<Camera>(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f));
     g_Control = std::make_shared<Control>();
     g_LightEnvironment = std::make_shared<LightEnvironment>(glm::vec3(0.25f), glm::vec3(1.f), 360.f - 85.f, 25.f);
-    g_Render = std::make_shared<Render>();
+    g_Render = std::make_unique<Render>();
     g_Ui = std::make_shared<Ui>();
 
     auto clock = std::chrono::system_clock::now();

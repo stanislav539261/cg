@@ -9,11 +9,12 @@ public:
     Sampler();
     ~Sampler();
 
-    void    SetParameter(GLenum, GLfloat);
-    void    SetParameter(GLenum, GLuint);
-    void    SetParameter(GLenum, const glm::vec2 &);
-    void    SetParameter(GLenum, const glm::vec3 &);
-    void    SetParameter(GLenum, const glm::vec4 &);
+    void    Bind(GLuint) const;
+    void    SetParameter(GLenum, GLfloat) const;
+    void    SetParameter(GLenum, GLuint) const;
+    void    SetParameter(GLenum, const glm::vec2 &) const;
+    void    SetParameter(GLenum, const glm::vec3 &) const;
+    void    SetParameter(GLenum, const glm::vec4 &) const;
 
     GLuint  m_Handle;
 };

@@ -1,25 +1,15 @@
 #include "framebuffer.hpp"
 
-DefaultFramebuffer::DefaultFramebuffer() {
-
-}
-
-DefaultFramebuffer::~DefaultFramebuffer() {
-
-}
-
 void DefaultFramebuffer::Bind() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void DefaultFramebuffer::ClearColor(GLuint layer, GLfloat r, GLfloat b, GLfloat g, GLfloat a) {
-    auto values = { r, g, b, a };
-
-    glClearNamedFramebufferfv(0, GL_COLOR, 0, values.begin());
+void DefaultFramebuffer::ClearColor(const glm::vec4 &value) {
+    glClearNamedFramebufferfv(0, GL_COLOR, 0, reinterpret_cast<const GLfloat *>(&value));
 }
 
-void DefaultFramebuffer::ClearDepth(GLuint layer, GLfloat d) {
-    glClearNamedFramebufferfv(0, GL_DEPTH, 0, &d);
+void DefaultFramebuffer::ClearDepth(GLfloat value) {
+    glClearNamedFramebufferfv(0, GL_DEPTH, 0, &value);
 }
 
 Framebuffer::Framebuffer() {
@@ -30,40 +20,22 @@ Framebuffer::~Framebuffer() {
     glDeleteFramebuffers(1, &m_Handle);
 }
 
-void Framebuffer::Bind() {
+void Framebuffer::Bind() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_Handle);
 }
 
-void Framebuffer::ClearColor(GLuint layer, GLfloat r, GLfloat b, GLfloat g, GLfloat a) {
-    auto values = { r, g, b, a };
-
-    glClearNamedFramebufferfv(m_Handle, GL_COLOR, layer, values.begin());
+void Framebuffer::ClearColor(GLuint attachment, const glm::vec4 &value) const {
+    glClearNamedFramebufferfv(m_Handle, GL_COLOR, attachment, reinterpret_cast<const GLfloat *>(&value));
 }
 
-void Framebuffer::ClearDepth(GLuint layer, GLfloat d) {
-    glClearNamedFramebufferfv(m_Handle, GL_DEPTH, layer, &d);
+void Framebuffer::ClearDepth(GLuint attachment, GLfloat value) const {
+    glClearNamedFramebufferfv(m_Handle, GL_DEPTH, attachment, &value);
 }
 
-void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<Texture2D> &texture) {
+void Framebuffer::SetAttachment(GLenum attachment, const Texture *texture) const {
     glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
 }
 
-void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<Texture2DArray> &texture) {
-    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
-}
-
-void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureCube> &texture) {
-    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
-}
-
-void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureCubeArray> &texture) {
-    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
-}
-
-void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureView2D> &texture) {
-    glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
-}
-
-void Framebuffer::SetAttachment(GLenum attachment, const std::shared_ptr<TextureViewCube> &texture) {
+void Framebuffer::SetAttachment(GLenum attachment, const TextureView *texture) const {
     glNamedFramebufferTexture(m_Handle, attachment, texture->m_Handle, 0);
 }

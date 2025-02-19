@@ -1,20 +1,15 @@
 #ifndef FRAMEBUFFER_HPP
 #define FRAMEBUFFER_HPP
 
-#include <memory>
-
 #include <GL/glew.h> 
 
 #include "texture.hpp"
 
 class DefaultFramebuffer {
 public:
-    DefaultFramebuffer();
-    ~DefaultFramebuffer();
-
-    void    Bind();
-    void    ClearColor(GLuint, GLfloat, GLfloat, GLfloat, GLfloat);
-    void    ClearDepth(GLuint, GLfloat);
+    static void     Bind();
+    static void     ClearColor(const glm::vec4 &);
+    static void     ClearDepth(GLfloat);
 };
 
 class Framebuffer {
@@ -22,15 +17,11 @@ public:
     Framebuffer();
     ~Framebuffer();
 
-    void    Bind();
-    void    ClearColor(GLuint, GLfloat, GLfloat, GLfloat, GLfloat);
-    void    ClearDepth(GLuint, GLfloat);
-    void    SetAttachment(GLenum, const std::shared_ptr<Texture2D> &);
-    void    SetAttachment(GLenum, const std::shared_ptr<Texture2DArray> &);
-    void    SetAttachment(GLenum, const std::shared_ptr<TextureCube> &);
-    void    SetAttachment(GLenum, const std::shared_ptr<TextureCubeArray> &);
-    void    SetAttachment(GLenum, const std::shared_ptr<TextureView2D> &);
-    void    SetAttachment(GLenum, const std::shared_ptr<TextureViewCube> &);
+    void    Bind() const;
+    void    ClearColor(GLuint, const glm::vec4 &) const;
+    void    ClearDepth(GLuint, GLfloat) const;
+    void    SetAttachment(GLenum, const Texture *) const;
+    void    SetAttachment(GLenum, const TextureView *) const;
 
     GLuint  m_Handle;
 };

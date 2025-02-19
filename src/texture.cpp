@@ -1,61 +1,13 @@
-#include <iostream>
-
 #include "texture.hpp"
 
-void Texture::Bind(GLuint binding) {
-    glBindTextureUnit(binding, m_Handle);
-}
-
-void Texture::Bind(GLuint binding, const std::shared_ptr<const Sampler> &sampler) {
-    Bind(binding);
-
-    glBindSampler(binding, sampler->m_Handle);
-}
-
-void Texture::GenerateMipMaps() {
-    glGenerateTextureMipmap(m_Handle);
-}
-
-void Texture::SetParameter(GLenum pname, GLfloat param) {
-    glTextureParameterf(m_Handle, pname, param);
-}
-
-void Texture::SetParameter(GLenum pname, GLuint param) {
-    glTextureParameteri(m_Handle, pname, param);
-}
-
-void Texture::SetParameter(GLenum pname, const glm::vec2 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-void Texture::SetParameter(GLenum pname, const glm::vec3 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-void Texture::SetParameter(GLenum pname, const glm::vec4 &param) {
-    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
-}
-
-Texture2D::Texture2D(GLuint width, GLuint height, GLuint mipLevel, GLuint format) {
-    m_Target = GL_TEXTURE_2D;
-
-    glCreateTextures(m_Target, 1, &m_Handle);
-    glTextureStorage2D(m_Handle, mipLevel, format, width, height);
-
-    m_Format = format;
-    m_Height = height;
-    m_MipLevel = mipLevel;
-    m_Width = width;
-}
-
-Texture2D::Texture2D(const Image &texture) {
+static std::tuple<GLuint, GLuint, GLuint> FindImageFormat(const Image *image) {
     auto format = GL_NONE;
     auto internalFormat = GL_NONE;
-    auto mipLevel = texture.MipLevel();
+    auto type = GL_UNSIGNED_BYTE;
 
-    switch (texture.m_Channels) {
+    switch (image->m_Channels) {
         case 1:
-            format = GL_R;
+            format = GL_RED;
             internalFormat = GL_R8;
             break;
         case 2:
@@ -74,151 +26,241 @@ Texture2D::Texture2D(const Image &texture) {
             break;
     }
 
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_Handle);
-    glTextureStorage2D(m_Handle, mipLevel, internalFormat, texture.m_Width, texture.m_Height);
-    glTextureSubImage2D(m_Handle, 0, 0, 0, texture.m_Width, texture.m_Height, format, GL_UNSIGNED_BYTE, texture.m_Data);
-    glGenerateTextureMipmap(m_Handle);
+    return std::make_tuple(format, internalFormat, type);
+}
 
+void Texture::Bind(GLuint binding) const {
+    glBindTextureUnit(binding, m_Handle);
+}
+
+void Texture::Bind(GLuint binding, const Sampler *sampler) const {
+    Bind(binding);
+
+    sampler->Bind(binding);
+}
+
+void Texture::GenerateMipMaps() const {
+    glGenerateTextureMipmap(m_Handle);
+}
+
+void Texture::SetParameter(GLenum pname, GLfloat param) const {
+    glTextureParameterf(m_Handle, pname, param);
+}
+
+void Texture::SetParameter(GLenum pname, GLuint param) const {
+    glTextureParameteri(m_Handle, pname, param);
+}
+
+void Texture::SetParameter(GLenum pname, const glm::vec2 &param) const {
+    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+}
+
+void Texture::SetParameter(GLenum pname, const glm::vec3 &param) const {
+    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+}
+
+void Texture::SetParameter(GLenum pname, const glm::vec4 &param) const {
+    glTextureParameterfv(m_Handle, pname, reinterpret_cast<const GLfloat *>(&param));
+}
+
+Texture2D::Texture2D(const glm::uvec2 &extent, GLuint mipLevel, GLenum format) : Texture() {
+    glCreateTextures(Target(), 1, &m_Handle);
+    glTextureStorage2D(m_Handle, mipLevel, format, extent.x, extent.y);
+
+    m_Extent = glm::uvec3(extent, 1u);
     m_Format = format;
-    m_Height = texture.m_Height;
     m_MipLevel = mipLevel;
-    m_Width = texture.m_Width;
 }
 
 Texture2D::~Texture2D() {
     glDeleteTextures(1, &m_Handle);
 }
 
-Texture2DArray::Texture2DArray(GLuint width, GLuint height, GLuint depth, GLuint mipLevel, GLuint format) {
-    m_Target = GL_TEXTURE_2D_ARRAY;
-
-    glCreateTextures(m_Target, 1, &m_Handle);
-    glTextureStorage3D(m_Handle, mipLevel, format, width, height, depth);
-
-    m_Format = format;
-    m_Depth = depth;
-    m_Height = height;
-    m_MipLevel = mipLevel;
-    m_Width = width;
+void Texture2D::Copy(const Texture *dst, const glm::uvec2 &srcOffset, GLuint srcLevel, const glm::uvec3 &dstOffset, GLuint dstLevel) const {
+    glCopyImageSubData(
+        m_Handle, 
+        Target(), 
+        srcLevel, 
+        srcOffset.x, 
+        srcOffset.y, 
+        1, 
+        dst->m_Handle, 
+        dst->Target(), 
+        dstLevel, 
+        dstOffset.x, 
+        dstOffset.y,
+        dstOffset.z,
+        m_Extent.x, 
+        m_Extent.y, 
+        m_Extent.z
+    );
 }
 
-Texture2DArray::Texture2DArray(const std::vector<std::shared_ptr<Image>> &textures) {
-    if (textures.size() > 0) {
-        auto format = GL_NONE;
-        auto internalFormat = GL_NONE;
-        auto mipLevel = textures[0]->MipLevel();
+void Texture2D::Upload(const Image *upload, const glm::uvec2 &offset, GLuint level) const {
+    auto [format, internalFormat, type] = FindImageFormat(upload);
+    auto mipLevel = upload->MipLevel();
 
-        switch (textures[0]->m_Channels) {
-            case 1:
-                format = GL_RED;
-                internalFormat = GL_R8;
-                break;
-            case 2:
-                format = GL_RG;
-                internalFormat = GL_RG8;
-                break;
-            case 3:
-                format = GL_RGB;
-                internalFormat = GL_RGB8;
-                break;
-            case 4:
-                format = GL_RGBA;
-                internalFormat = GL_RGBA8;
-                break;
-            default:
-                break;
-        }
+    assert(m_Extent.x == upload->m_Width);
+    assert(m_Extent.y == upload->m_Height);
 
-        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_Handle);
-        glTextureStorage3D(m_Handle, mipLevel, internalFormat, textures[0]->m_Width, textures[0]->m_Height, textures.size());
-        
-        for (auto i = 0u; i < textures.size(); i++) {
-            if (textures[i]->m_Width != textures[0]->m_Width) {
-                std::cout << "Width of texture " << i + 1 << " isn't equal to first" << std::endl;
-                continue;
-            }
-            if (textures[i]->m_Height != textures[0]->m_Height) {
-                std::cout << "Height of texture " << i + 1 << " isn't equal to first" << std::endl;
-                continue;
-            }
-            if (textures[i]->m_Channels != textures[0]->m_Channels) {
-                std::cout << "Channels of texture " << i + 1 << " isn't equal to first" << std::endl;
-                continue;
-            }
+    glTextureSubImage2D(m_Handle, level, offset.x, offset.y, upload->m_Width, upload->m_Height, format, type, upload->m_Data);
+}
 
-            glTextureSubImage3D(m_Handle, 0, 0, 0, i, textures[0]->m_Width, textures[0]->m_Height, 1, format, GL_UNSIGNED_BYTE, textures[i]->m_Data);
-        }
+Texture2DArray::Texture2DArray(const glm::uvec3 &extent, GLuint mipLevel, GLenum format) : Texture() {
+    glCreateTextures(Target(), 1, &m_Handle);
+    glTextureStorage3D(m_Handle, mipLevel, format, extent.x, extent.y, extent.z);
 
-        glGenerateTextureMipmap(m_Handle);
-
-        m_Format = format;
-        m_Height = textures[0]->m_Height;
-        m_MipLevel = mipLevel;
-        m_Width = textures[0]->m_Width;
-    } else {
-        std::cout << "Can't create Texture2DArray: num textures is zero" << std::endl;
-    }
+    m_Extent = extent;
+    m_Format = format;
+    m_MipLevel = mipLevel;
 }
 
 Texture2DArray::~Texture2DArray() {
     glDeleteTextures(1, &m_Handle);
 }
 
-TextureCube::TextureCube(GLuint width, GLuint height, GLuint mipLevel, GLuint format) {
-    m_Target = GL_TEXTURE_CUBE_MAP;
+void Texture2DArray::Copy(const Texture *dst, const glm::uvec3 &srcOffset, GLuint srcLevel, const glm::uvec3 &dstOffset, GLuint dstLevel) const {
+    glCopyImageSubData(
+        m_Handle, 
+        Target(), 
+        srcLevel, 
+        srcOffset.x, 
+        srcOffset.y, 
+        srcOffset.z, 
+        dst->m_Handle, 
+        dst->Target(), 
+        dstLevel, 
+        dstOffset.x, 
+        dstOffset.y,
+        dstOffset.z,
+        m_Extent.x, 
+        m_Extent.y, 
+        m_Extent.z
+    );
+}
 
-    glCreateTextures(m_Target, 1, &m_Handle);
-    glTextureStorage2D(m_Handle, mipLevel, format, width, height);
+void Texture2DArray::Upload(const Image *upload, const glm::uvec3 &offset, GLuint level) const {
+    auto [format, internalFormat, type] = FindImageFormat(upload);
+    auto mipLevel = upload->MipLevel();
 
+    assert(m_Extent.x == upload->m_Width);
+    assert(m_Extent.y == upload->m_Height);
+
+    glTextureSubImage3D(m_Handle, level, offset.x, offset.y, offset.z, upload->m_Width, upload->m_Height, 1, format, type, upload->m_Data);
+}
+
+TextureCube::TextureCube(const glm::uvec2 &extent, GLuint mipLevel, GLenum format) : Texture() {
+    glCreateTextures(Target(), 1, &m_Handle);
+    glTextureStorage2D(m_Handle, mipLevel, format, extent.x, extent.y);
+
+    m_Extent = glm::uvec3(extent, 6u);
     m_Format = format;
-    m_Height = height;
     m_MipLevel = mipLevel;
-    m_Width = width;
 }
 
 TextureCube::~TextureCube() {
     glDeleteTextures(1, &m_Handle);
 }
 
-TextureCubeArray::TextureCubeArray(GLuint width, GLuint height, GLuint depth, GLuint mipLevel, GLuint format) {
-    m_Target = GL_TEXTURE_CUBE_MAP_ARRAY;
+void TextureCube::Copy(const Texture *dst, const glm::uvec3 &srcOffset, GLuint srcLevel, const glm::uvec3 &dstOffset, GLuint dstLevel) const {
+    glCopyImageSubData(
+        m_Handle, 
+        Target(), 
+        srcLevel, 
+        srcOffset.x, 
+        srcOffset.y, 
+        srcOffset.z, 
+        dst->m_Handle, 
+        dst->Target(), 
+        dstLevel, 
+        dstOffset.x, 
+        dstOffset.y,
+        dstOffset.z,
+        m_Extent.x, 
+        m_Extent.y, 
+        m_Extent.z
+    );
+}
 
-    glCreateTextures(m_Target, 1, &m_Handle);
-    glTextureStorage3D(m_Handle, mipLevel, format, width, height, depth);
+void TextureCube::Upload(const Image *upload, const glm::uvec3 &offset, GLuint level) const {
+    auto [format, internalFormat, type] = FindImageFormat(upload);
+    auto mipLevel = upload->MipLevel();
 
-    m_Depth = depth;
+    assert(m_Extent.x == upload->m_Width);
+    assert(m_Extent.y == upload->m_Height);
+
+    glTextureSubImage3D(m_Handle, level, offset.x, offset.y, offset.z, upload->m_Width, upload->m_Height, 1, format, type, upload->m_Data);
+}
+
+TextureCubeArray::TextureCubeArray(const glm::uvec3 &extent, GLuint mipLevel, GLenum format) : Texture() {
+    glCreateTextures(Target(), 1, &m_Handle);
+    glTextureStorage3D(m_Handle, mipLevel, format, extent.x, extent.y, extent.z);
+
+    m_Extent = extent;
     m_Format = format;
-    m_Height = height;
     m_MipLevel = mipLevel;
-    m_Width = width;
 }
 
 TextureCubeArray::~TextureCubeArray() {
     glDeleteTextures(1, &m_Handle);
 }
 
-void TextureView::Bind(GLuint binding) {
+void TextureCubeArray::Copy(const Texture *dst, const glm::uvec3 &srcOffset, GLuint srcLevel, const glm::uvec3 &dstOffset, GLuint dstLevel) const {
+    glCopyImageSubData(
+        m_Handle, 
+        Target(), 
+        srcLevel, 
+        srcOffset.x, 
+        srcOffset.y, 
+        srcOffset.z, 
+        dst->m_Handle, 
+        dst->Target(), 
+        dstLevel, 
+        dstOffset.x, 
+        dstOffset.y,
+        dstOffset.z,
+        m_Extent.x, 
+        m_Extent.y, 
+        m_Extent.z
+    );
+}
+
+void TextureCubeArray::Upload(const Image *upload, const glm::uvec3 &offset, GLuint level) const {
+    auto [format, internalFormat, type] = FindImageFormat(upload);
+    auto mipLevel = upload->MipLevel();
+
+    assert(m_Extent.x == upload->m_Width);
+    assert(m_Extent.y == upload->m_Height);
+
+    glTextureSubImage3D(m_Handle, level, offset.x, offset.y, offset.z, upload->m_Width, upload->m_Height, 1, format, type, upload->m_Data);
+}
+
+void TextureView::Bind(GLuint binding) const {
     glBindTextureUnit(binding, m_Handle);
 }
 
-void TextureView::Bind(GLuint binding, const std::shared_ptr<const Sampler> &sampler) {
+void TextureView::Bind(GLuint binding, const Sampler *sampler) const {
     Bind(binding);
 
-    glBindSampler(binding, sampler->m_Handle);
+    sampler->Bind(binding);
 }
 
-TextureView2D::TextureView2D(std::shared_ptr<const Texture> texture, GLuint minLevel, GLuint numLevels, GLuint minLayer) {
+TextureView2D::TextureView2D(const Texture *texture, GLuint minLevel, GLuint numLevels, GLuint minLayer) : TextureView() {
     glGenTextures(1, &m_Handle);
-    glTextureView(m_Handle, GL_TEXTURE_2D, texture->m_Handle, texture->m_Format, minLevel, numLevels, minLayer, 1);
+    glTextureView(m_Handle, Target(), texture->m_Handle, texture->m_Format, minLevel, numLevels, minLayer, 1);
+
+    m_Texture = texture;
 }
 
 TextureView2D::~TextureView2D() {
     glDeleteTextures(1, &m_Handle);
 }
 
-TextureViewCube::TextureViewCube(std::shared_ptr<const Texture> texture, GLuint minLevel, GLuint numLevels, GLuint minLayer) {
+TextureViewCube::TextureViewCube(const Texture *texture, GLuint minLevel, GLuint numLevels, GLuint minLayer) : TextureView() {
     glGenTextures(1, &m_Handle);
-    glTextureView(m_Handle, GL_TEXTURE_CUBE_MAP, texture->m_Handle, texture->m_Format, minLevel, numLevels, minLayer, 6);
+    glTextureView(m_Handle, Target(), texture->m_Handle, texture->m_Format, minLevel, numLevels, minLayer, 6);
+
+    m_Texture = texture;
 }
 
 TextureViewCube::~TextureViewCube() {

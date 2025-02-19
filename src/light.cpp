@@ -7,7 +7,7 @@
 std::shared_ptr<LightEnvironment> g_LightEnvironment = nullptr;
 std::vector<std::shared_ptr<LightPoint>> g_LightPoints = {};
 
-LightEnvironment::LightEnvironment(const glm::vec3 &ambientColor, const glm::vec3 &baseColor, float pitch, float yaw) {
+LightEnvironment::LightEnvironment(const glm::vec3 &ambientColor, const glm::vec3 &baseColor, float pitch, float yaw) : Object() {
     m_AmbientColor = ambientColor;
     m_BaseColor = baseColor;
     m_Pitch = pitch;
@@ -107,7 +107,7 @@ glm::vec3 LightEnvironment::Forward() const {
     ));
 }
 
-LightPoint::LightPoint(const glm::vec3 &position, const glm::vec3 &baseColor, float radius, bool castShadows) {
+LightPoint::LightPoint(const glm::vec3 &position, const glm::vec3 &baseColor, float radius, bool castShadows) : Object() {
     m_BaseColor = baseColor;
     m_Position = position;
     m_Radius = radius;

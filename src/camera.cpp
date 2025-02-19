@@ -14,7 +14,7 @@ Camera::Camera(
     const glm::vec3 &position,
     float pitch, 
     float yaw
-) {
+) : Object() {
     m_Position = position;
     m_Up = glm::vec3(0.f, 1.f, 0.f);
     m_NearZ = nearZ;

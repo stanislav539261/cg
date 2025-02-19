@@ -5,7 +5,9 @@
 
 #include <glm/glm.hpp>
 
-class Camera {
+#include "object.hpp"
+
+class Camera : public Object {
 public:
     Camera(float, float, float, float, const glm::vec3 & = glm::vec3(0.f), float = 0.f, float = 0.f);
     ~Camera();
@@ -20,7 +22,6 @@ public:
     float       m_FovY;
     float       m_NearZ;
     float       m_Pitch;
-    glm::vec3   m_Position;
     glm::vec3   m_Up;
     float       m_Yaw;
 };

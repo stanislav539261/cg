@@ -7,8 +7,9 @@
 #include <glm/glm.hpp>
 
 #include "camera.hpp"
+#include "object.hpp"
 
-class LightEnvironment {
+class LightEnvironment : public Object {
 public:
     LightEnvironment(const glm::vec3 &, const glm::vec3 &, float, float);
     ~LightEnvironment();
@@ -22,7 +23,7 @@ public:
     float                       m_Yaw;
 };
 
-class LightPoint {
+class LightPoint : public Object {
 public:
     LightPoint(const glm::vec3 &, const glm::vec3 &, float, bool = false);
     ~LightPoint();
@@ -30,7 +31,6 @@ public:
     std::array<glm::mat4, 6>    ViewProjections(bool) const;
 
     glm::vec3                   m_BaseColor;
-    glm::vec3                   m_Position;
     float                       m_Radius;
     bool                        m_CastShadows;
 };

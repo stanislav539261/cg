@@ -638,7 +638,7 @@ void Render::ShadowCsmPass() {;
     m_VertexBuffer->BindStorage(2);
 
     for (auto i = 0u; i < m_ShadowCsmColorTexture2DArray->m_Extent.z; i++) {
-        glUniform1ui(0, i);
+        m_ShadowCsmShaderProgram->SetUniform(0, i);
 
         glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
     }
@@ -685,10 +685,10 @@ void Render::ShadowCubePass() {
         m_ShadowCubeFramebuffer->ClearColor(0, glm::vec4(1.f));
         m_ShadowCubeFramebuffer->ClearDepth(0, 1.f);
 
-        glUniform1ui(1, i);
+        m_ShadowCubeShaderProgram->SetUniform(1, i);
 
         for (auto j = 0u; j < 6; j++) {
-            glUniform1ui(0, j);
+            m_ShadowCubeShaderProgram->SetUniform(0, j);
 
             glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
         }
@@ -746,7 +746,7 @@ void Render::DownsampleDepthPass() {
     glFrontFace(GL_CCW);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-    glUniform1i(0, m_EnableReverseZ);
+    m_DownsampleDepthShaderProgram->SetUniform(0, m_EnableReverseZ);
 
     assert(m_DepthTexture2D);
 
@@ -792,13 +792,13 @@ void Render::AmbientOcclusionPass() {
     constexpr auto OFFSETS = std::array<float, 4> { 0.0f, 0.5f, 0.25f, 0.75f };
     constexpr auto ROTATIONS = std::array<float, 6> { 60.f, 300.f, 180.f, 240.f, 120.f, 0.f };
 
-    glUniform1f(0, m_AmbientOcclusionFalloffFar);
-    glUniform1f(1, m_AmbientOcclusionFalloffNear);
-    glUniform1ui(2, std::max(m_AmbientOcclusionNumSamples, 1));
-    glUniform1ui(3, std::max(m_AmbientOcclusionNumSlices, 1));
-    glUniform1f(4, OFFSETS[m_NumFrames / 6 % OFFSETS.size()]);
-    glUniform1f(5, m_AmbientOcclusionRadius);
-    glUniform1f(6, ROTATIONS[m_NumFrames % 6] / 360.f);
+    m_AmbientOcclusionShaderProgram->SetUniform(0, m_AmbientOcclusionFalloffFar);
+    m_AmbientOcclusionShaderProgram->SetUniform(1, m_AmbientOcclusionFalloffNear);
+    m_AmbientOcclusionShaderProgram->SetUniform(2, static_cast<std::uint32_t>(std::max(m_AmbientOcclusionNumSamples, 1)));
+    m_AmbientOcclusionShaderProgram->SetUniform(3, static_cast<std::uint32_t>(std::max(m_AmbientOcclusionNumSlices, 1)));
+    m_AmbientOcclusionShaderProgram->SetUniform(4, OFFSETS[m_NumFrames / 6 % OFFSETS.size()]);
+    m_AmbientOcclusionShaderProgram->SetUniform(5, m_AmbientOcclusionRadius);
+    m_AmbientOcclusionShaderProgram->SetUniform(6, ROTATIONS[m_NumFrames % 6] / 360.f);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -827,7 +827,7 @@ void Render::AmbientOcclusionSpartialPass() {
     m_AmbientOcclusionTexture2D->Bind(0, m_SamplerClamp.get());
     m_DepthTextureView2Ds.at(0)->Bind(1, m_SamplerClamp.get());
 
-    glUniform1i(0, m_EnableReverseZ);
+    m_AmbientOcclusionSpartialShaderProgram->SetUniform(0, m_EnableAmbientOcclusion);
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -896,7 +896,7 @@ void Render::LightCullingPass() {
     m_LightIndexBuffer->BindStorage(4);
     m_LightPointBuffer->BindStorage(5);
 
-    glUniform1ui(0, g_LightPoints.size());
+    m_LightCullingShaderProgram->SetUniform(0, static_cast<std::uint32_t>(g_LightPoints.size()));
 
     glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -966,14 +966,14 @@ void Render::LightingPass() {
     m_ShadowCubeColorTextureCubeArray->Bind(7, m_SamplerClamp.get());  
     m_ShadowCubeDepthTextureCubeArray->Bind(8, m_SamplerClamp.get());  
 
-    glUniform1i(0, m_EnableAmbientOcclusion);
-    glUniform1i(1, m_EnableReverseZ);
-    glUniform1ui(2, g_LightPoints.size());
-    glUniform1f(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
-    glUniform1f(4, m_ShadowCsmVarianceMax);
-    glUniform1f(5, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
-    glUniform1f(6, m_ShadowCubeVarianceMax);
-
+    m_LightingShaderProgram->SetUniform(0, m_EnableAmbientOcclusion);
+    m_LightingShaderProgram->SetUniform(1, m_EnableReverseZ);
+    m_LightingShaderProgram->SetUniform(2, static_cast<std::uint32_t>(g_LightPoints.size()));
+    m_LightingShaderProgram->SetUniform(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
+    m_LightingShaderProgram->SetUniform(4, m_ShadowCsmVarianceMax);
+    m_LightingShaderProgram->SetUniform(5, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
+    m_LightingShaderProgram->SetUniform(6, m_ShadowCubeVarianceMax);
+    
     glMultiDrawArraysIndirect(GL_TRIANGLES, 0, m_Meshes.size(), sizeof(DrawIndirectCommand));
 }
 
@@ -1003,7 +1003,7 @@ void Render::ScreenPass() {
             break;
     }
 
-    glUniform1ui(0, static_cast<std::uint32_t>(m_DrawFlags));
+    m_ScreenShaderProgram->SetUniform(0, static_cast<std::uint32_t>(m_DrawFlags));
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }

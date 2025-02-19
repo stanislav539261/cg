@@ -87,7 +87,7 @@ struct GpuLightPoint {
     glm::vec3                   m_Position;
     float                       m_Radius;  
     glm::vec3                   m_BaseColor;
-    std::int32_t                         m_ShadowIndex;
+    std::int32_t                m_ShadowIndex;
 };
 
 struct GpuMaterial {

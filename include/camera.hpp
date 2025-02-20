@@ -1,8 +1,6 @@
 #ifndef CAMERA_HPP
 #define CAMERA_HPP
 
-#include <memory>
-
 #include <glm/glm.hpp>
 
 #include "object.hpp"
@@ -15,6 +13,8 @@ public:
     float       AspectRatio() const;
     glm::vec3   Forward() const;
     bool        IsCamera() const override { return true; }
+    bool        IsLightEnvironment() const override { return false; }
+    bool        IsLightPoint() const override { return false; }
     glm::mat4   Projection(bool) const;
     void        Translate(const glm::vec3 &);
     void        Update() override;

@@ -13,10 +13,10 @@ public:
     void            Bind(GLuint) const;
     void            Bind(GLuint, const Sampler *) const;
     void            GenerateMipMaps() const;
-    virtual bool    Is2D() const { return false; }
-    virtual bool    Is2DArray() const { return false; }
-    virtual bool    IsCube() const { return false; }
-    virtual bool    IsCubeArray() const { return false; }
+    virtual bool    Is2D() const = 0;
+    virtual bool    Is2DArray() const = 0;
+    virtual bool    IsCube() const = 0;
+    virtual bool    IsCubeArray() const = 0;
     void            SetParameter(GLenum, GLfloat) const;
     void            SetParameter(GLenum, GLuint) const;
     void            SetParameter(GLenum, const glm::vec2 &) const;
@@ -40,6 +40,9 @@ public:
 
     void    Copy(const Texture *, const glm::uvec2 &, GLuint, const glm::uvec3 &, GLuint) const;
     bool    Is2D() const override { return true; }
+    bool    Is2DArray() const override { return false; }
+    bool    IsCube() const override { return false; }
+    bool    IsCubeArray() const override { return false; }
     GLenum  Target() const override { return GL_TEXTURE_2D; }
     void    Upload(const Image *, const glm::uvec2 &, GLuint) const;
 };
@@ -50,7 +53,10 @@ public:
     ~Texture2DArray();
 
     void    Copy(const Texture *, const glm::uvec3 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    Is2D() const override { return false; }
     bool    Is2DArray() const override { return true; }
+    bool    IsCube() const override { return false; }
+    bool    IsCubeArray() const override { return false; }
     GLenum  Target() const override { return GL_TEXTURE_2D_ARRAY; }
     void    Upload(const Image *, const glm::uvec3 &, GLuint) const;
 };
@@ -61,7 +67,10 @@ public:
     ~TextureCube();
 
     void    Copy(const Texture *, const glm::uvec3 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    Is2D() const override { return false; }
+    bool    Is2DArray() const override { return false; }
     bool    IsCube() const override { return true; }
+    bool    IsCubeArray() const override { return false; }
     GLenum  Target() const override { return GL_TEXTURE_CUBE_MAP; }
     void    Upload(const Image *, const glm::uvec3 &, GLuint) const;
 };
@@ -72,6 +81,9 @@ public:
     ~TextureCubeArray();
 
     void    Copy(const Texture *, const glm::uvec3 &, GLuint, const glm::uvec3 &, GLuint) const;
+    bool    Is2D() const override { return false; }
+    bool    Is2DArray() const override { return false; }
+    bool    IsCube() const override { return false; }
     bool    IsCubeArray() const override { return true; }
     GLenum  Target() const override { return GL_TEXTURE_CUBE_MAP_ARRAY; }
     void    Upload(const Image *, const glm::uvec3 &, GLuint) const;
@@ -83,10 +95,10 @@ public:
 
     void                Bind(GLuint) const;
     void                Bind(GLuint, const Sampler *) const;
-    virtual bool        Is2D() const { return false; }
-    virtual bool        Is2DArray() const { return false; }
-    virtual bool        IsCube() const { return false; }
-    virtual bool        IsCubeArray() const { return false; }
+    virtual bool        Is2D() const = 0;
+    virtual bool        Is2DArray() const = 0;
+    virtual bool        IsCube() const = 0;
+    virtual bool        IsCubeArray() const = 0;
     virtual GLenum      Target() const { return GL_NONE; }
 
     GLuint              m_Handle;
@@ -102,6 +114,9 @@ public:
     ~TextureView2D();
 
     bool    Is2D() const override { return true; }
+    bool    Is2DArray() const override { return false; }
+    bool    IsCube() const override { return false; }
+    bool    IsCubeArray() const override { return false; }
     GLenum  Target() const override { return GL_TEXTURE_2D; }
 };
 
@@ -110,7 +125,10 @@ public:
     TextureViewCube(const Texture *, GLuint, GLuint, GLuint);
     ~TextureViewCube();
 
+    bool    Is2D() const override { return false; }
+    bool    Is2DArray() const override { return false; }
     bool    IsCube() const override { return true; }
+    bool    IsCubeArray() const override { return false; }
     GLenum  Target() const override { return GL_TEXTURE_CUBE_MAP; }
 };
 

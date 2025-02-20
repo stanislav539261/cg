@@ -11,10 +11,10 @@ class Object {
 public:
     virtual ~Object() = default;
 
-    virtual bool    IsCamera() const { return false; }
-    virtual bool    IsLightEnvironment() const { return false; }
-    virtual bool    IsLightPoint() const { return false; }
-    virtual void    Update() {};
+    virtual bool    IsCamera() const = 0;
+    virtual bool    IsLightEnvironment() const = 0;
+    virtual bool    IsLightPoint() const = 0;
+    virtual void    Update() = 0;
 
     Handle          m_Handle;
     std::string     m_Name;

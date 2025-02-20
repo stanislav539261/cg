@@ -55,10 +55,9 @@ int main(int argc, char **argv) {
     camera->m_Position = glm::vec3(0.f, 200.f, 0.f);
 
     auto lightEnvironment = std::make_unique<LightEnvironment>();
+    lightEnvironment->m_Angles = glm::vec3(260.f, 20.f, 0.f);
     lightEnvironment->m_AmbientColor = glm::vec3(0.2f);
     lightEnvironment->m_BaseColor = glm::vec3(1.f);
-    lightEnvironment->m_Pitch = 260.f;
-    lightEnvironment->m_Yaw = 20.f;
 
     g_Scene->Insert(std::move(camera));
     g_Scene->Insert(std::move(lightEnvironment));

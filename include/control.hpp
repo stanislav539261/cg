@@ -15,9 +15,9 @@ public:
 
     void                        Update(const std::vector<SDL_Event> &);
 
-    glm::vec3                   m_Direction;
-    float                       m_PitchOffset;
-    float                       m_YawOffset;
+    glm::vec3                   m_CameraDirection;
+    float                       m_CameraPitch;
+    float                       m_CameraYaw;
 
 private:
     std::set<unsigned int>      m_KeysPressedRepeat;

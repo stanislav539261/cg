@@ -9,8 +9,6 @@
 LightEnvironment::LightEnvironment() : Object() {
     m_AmbientColor = {};
     m_BaseColor = {};
-    m_Pitch = 0.f;
-    m_Yaw = 0.f;
 }
 
 LightEnvironment::~LightEnvironment() {
@@ -96,14 +94,6 @@ std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera *
     }
 
     return cascades;
-}
-
-glm::vec3 LightEnvironment::Forward() const {
-    return glm::normalize(glm::vec3(
-        cos(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch)),
-        sin(glm::radians(m_Pitch)),
-        sin(glm::radians(m_Yaw)) * cos(glm::radians(m_Pitch))
-    ));
 }
 
 void LightEnvironment::Update() {

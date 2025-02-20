@@ -6,6 +6,7 @@
 #include "ui.hpp"
 #include "scene.hpp"
 #include "window.hpp"
+#include <glm/gtc/quaternion.hpp>
 
 std::shared_ptr<Ui> g_Ui = nullptr;
 
@@ -91,14 +92,12 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
                 ImGui::SeparatorText(lightEnvironmentName.c_str());
 
                 const auto ambientColor = std::string("Ambient color##LightEnvironment");
+                const auto anglesName = std::string("Angles##LightEnvironment");
                 const auto baseColorName = std::string("Base color##LightEnvironment");
-                const auto pitchName = std::string("Pitch##LightEnvironment");
-                const auto yawName = std::string("Yaw##LightEnvironment");
 
-                ImGui::ColorEdit3(ambientColor.c_str(), reinterpret_cast<float *>(&m_LightEnvironment->m_AmbientColor));
-                ImGui::ColorEdit3(baseColorName.c_str(), reinterpret_cast<float *>(&m_LightEnvironment->m_BaseColor));
-                ImGui::SliderFloat(pitchName.c_str(), &m_LightEnvironment->m_Pitch, 0.f, 360.f);
-                ImGui::SliderFloat(yawName.c_str(), &m_LightEnvironment->m_Yaw, 0.f, 360.f);
+                ImGui::ColorEdit3(ambientColor.c_str(), &m_LightEnvironment->m_AmbientColor.r);
+                ImGui::DragFloat3(anglesName.c_str(), &m_LightEnvironment->m_Angles.x);
+                ImGui::ColorEdit3(baseColorName.c_str(), &m_LightEnvironment->m_BaseColor.r);
             }
 
             auto i = 0u;
@@ -115,8 +114,8 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
                 const auto radiusName = std::string("Radius##LightPoint") + std::to_string(i);
                 const auto castShadowsName = std::string("Cast shadows##LightPoint") + std::to_string(i);
 
-                ImGui::DragFloat3(positonName.c_str(), reinterpret_cast<float *>(&lightPoint->m_Position));
-                ImGui::ColorEdit3(baseColorName.c_str(), reinterpret_cast<float *>(&lightPoint->m_BaseColor));
+                ImGui::DragFloat3(positonName.c_str(), &lightPoint->m_Position.x);
+                ImGui::ColorEdit3(baseColorName.c_str(), &lightPoint->m_BaseColor.r);
                 ImGui::DragFloat(radiusName.c_str(), &lightPoint->m_Radius);
                 ImGui::Checkbox(castShadowsName.c_str(), &lightPoint->m_CastShadows);
             }

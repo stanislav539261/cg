@@ -14,7 +14,6 @@ public:
     ~LightEnvironment();
 
     std::array<glm::mat4, 5>    CascadeViewProjections(const Camera *, const std::array<float, 4> &, bool) const;
-    glm::vec3                   Forward() const;
     bool                        IsCamera() const override { return false; }
     bool                        IsLightEnvironment() const override { return true; }
     bool                        IsLightPoint() const override { return false; }
@@ -22,8 +21,6 @@ public:
 
     glm::vec3                   m_AmbientColor;
     glm::vec3                   m_BaseColor;
-    float                       m_Pitch;
-    float                       m_Yaw;
 };
 
 class LightPoint : public Object {

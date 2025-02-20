@@ -5,9 +5,9 @@
 
 #include "camera.hpp"
 #include "control.hpp"
-#include "light.hpp"
 #include "model.hpp"
 #include "render.hpp"
+#include "scene.hpp"
 #include "state.hpp"
 #include "ui.hpp"
 #include "window.hpp"
@@ -38,17 +38,30 @@ int main(int argc, char **argv) {
 
     auto aspectRatio = width / static_cast<float>(height);
 
-    g_Camera = std::make_shared<Camera>(aspectRatio, 78.f, 1.f, 100000.f, glm::vec3(-200.f, 200.f, 0.f));
     g_Control = std::make_shared<Control>();
-    g_LightEnvironment = std::make_shared<LightEnvironment>(glm::vec3(0.25f), glm::vec3(1.f), 360.f - 85.f, 25.f);
     g_Render = std::make_unique<Render>();
+    g_Scene = std::make_unique<Scene>();
     g_Ui = std::make_shared<Ui>();
 
     auto clock = std::chrono::system_clock::now();
     auto events = std::vector<SDL_Event>();
     auto quit = false;
+    
 
     g_Render->LoadModel(Model(g_ResourcePath / std::filesystem::path(filename)));
+
+    // Initialize scene
+    auto camera = std::make_unique<Camera>();
+    camera->m_Position = glm::vec3(0.f, 200.f, 0.f);
+
+    auto lightEnvironment = std::make_unique<LightEnvironment>();
+    lightEnvironment->m_AmbientColor = glm::vec3(0.2f);
+    lightEnvironment->m_BaseColor = glm::vec3(1.f);
+    lightEnvironment->m_Pitch = 260.f;
+    lightEnvironment->m_Yaw = 20.f;
+
+    g_Scene->Insert(std::move(camera));
+    g_Scene->Insert(std::move(lightEnvironment));
 
     while (!quit) {
         g_PreviousTime = g_CurrentTime;
@@ -73,12 +86,14 @@ int main(int argc, char **argv) {
 
         SDL_SetRelativeMouseMode(SDL_TRUE);
 
+        g_Scene->Update();
         g_Control->Update(events);
         g_Render->Update();
         g_Ui->Update(events);
         g_Window->Update();    
     }
 
+    g_Scene = nullptr;
     g_Ui = nullptr;
     g_Render = nullptr;
     g_Window = nullptr;

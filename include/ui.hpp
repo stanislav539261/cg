@@ -6,14 +6,20 @@
 
 #include <SDL2/SDL_events.h>
 
+#include "camera.hpp"
+#include "light.hpp"
+
 class Ui {
 public:
     Ui();
     ~Ui();
 
-    void                    Update(const std::vector<SDL_Event> &);
+    void                            Update(const std::vector<SDL_Event> &);
 
-    bool                    m_ShowMenu;
+    const Camera *                  m_ActiveCamera;
+    LightEnvironment *              m_LightEnvironment;
+    std::vector<LightPoint *>       m_LightPoints;
+    bool                            m_ShowMenu;
 };
 
 extern std::shared_ptr<Ui> g_Ui;

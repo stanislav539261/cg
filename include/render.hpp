@@ -9,6 +9,7 @@
 
 #include "buffer.hpp"
 #include "framebuffer.hpp"
+#include "light.hpp"
 #include "model.hpp"
 #include "shader.hpp"
 #include "texture.hpp"
@@ -114,6 +115,9 @@ public:
     float                                                   m_AmbientOcclusionRadius;
     SDL_GLContext                                           m_Context;
     DrawFlags                                               m_DrawFlags;
+    const Camera *                                          m_DrawableActiveCamera;
+    const LightEnvironment *                                m_DrawableLightEnvironment;
+    std::vector<const LightPoint *>                         m_DrawableLightPoints;
     bool                                                    m_EnableAmbientOcclusion;
     bool                                                    m_EnableReverseZ;
     bool                                                    m_EnableVSync;

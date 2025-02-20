@@ -2,7 +2,6 @@
 #define LIGHT_HPP
 
 #include <array>
-#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -11,11 +10,13 @@
 
 class LightEnvironment : public Object {
 public:
-    LightEnvironment(const glm::vec3 &, const glm::vec3 &, float, float);
+    LightEnvironment();
     ~LightEnvironment();
 
-    std::array<glm::mat4, 5>    CascadeViewProjections(const Camera &, const std::array<float, 4> &, bool) const;
+    std::array<glm::mat4, 5>    CascadeViewProjections(const Camera *, const std::array<float, 4> &, bool) const;
     glm::vec3                   Forward() const;
+    bool                        IsLightEnvironment() const override { return true; }
+    void                        Update() override;
 
     glm::vec3                   m_AmbientColor;
     glm::vec3                   m_BaseColor;
@@ -25,17 +26,16 @@ public:
 
 class LightPoint : public Object {
 public:
-    LightPoint(const glm::vec3 &, const glm::vec3 &, float, bool = false);
+    LightPoint();
     ~LightPoint();
 
+    bool                        IsLightPoint() const override { return true; }
     std::array<glm::mat4, 6>    ViewProjections(bool) const;
+    void                        Update() override;
 
     glm::vec3                   m_BaseColor;
     float                       m_Radius;
     bool                        m_CastShadows;
 };
-
-extern std::shared_ptr<LightEnvironment> g_LightEnvironment;
-extern std::vector<std::shared_ptr<LightPoint>> g_LightPoints;
 
 #endif /* LIGHT_HPP */

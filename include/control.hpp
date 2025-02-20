@@ -5,6 +5,7 @@
 #include <set>
 #include <vector>
 
+#include <glm/glm.hpp>
 #include <SDL2/SDL_events.h>
 
 class Control {
@@ -14,6 +15,11 @@ public:
 
     void                        Update(const std::vector<SDL_Event> &);
 
+    glm::vec3                   m_Direction;
+    float                       m_PitchOffset;
+    float                       m_YawOffset;
+
+private:
     std::set<unsigned int>      m_KeysPressedRepeat;
     std::set<unsigned int>      m_KeysPressedOnce;
 };

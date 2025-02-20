@@ -2,9 +2,9 @@
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl2.h"
 
-#include "light.hpp"
 #include "render.hpp"
 #include "ui.hpp"
+#include "scene.hpp"
 #include "window.hpp"
 
 std::shared_ptr<Ui> g_Ui = nullptr;
@@ -25,6 +25,9 @@ Ui::Ui() {
         ImGui_ImplOpenGL3_Init("#version 460");
     }
 
+    m_ActiveCamera = nullptr;
+    m_LightEnvironment = nullptr;
+    m_LightPoints = {};
     m_ShowMenu = false;
 }
 
@@ -81,22 +84,31 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
             ImGui::DragInt("Num samples##AO", &g_Render->m_AmbientOcclusionNumSamples, 1.f, 1);
             ImGui::DragInt("Num slices##AO", &g_Render->m_AmbientOcclusionNumSlices, 1.f, 1);
 
-            // LightEnvironment
-            ImGui::SeparatorText("LightEnvironment");
-            ImGui::ColorEdit3("Ambient color", reinterpret_cast<float *>(&g_LightEnvironment->m_AmbientColor));
-            ImGui::ColorEdit3("Base color", reinterpret_cast<float *>(&g_LightEnvironment->m_BaseColor));
-            ImGui::SliderFloat("Pitch", &g_LightEnvironment->m_Pitch, 0.f, 360.f);
-            ImGui::SliderFloat("Yaw", &g_LightEnvironment->m_Yaw, 0.f, 360.f);
+            // Light objects
+            if (m_LightEnvironment) {
+                const auto lightEnvironmentName = std::string("LightEnvironment") ;
 
-            // LightPoints
+                ImGui::SeparatorText(lightEnvironmentName.c_str());
+
+                const auto ambientColor = std::string("Ambient color##LightEnvironment");
+                const auto baseColorName = std::string("Base color##LightEnvironment");
+                const auto pitchName = std::string("Pitch##LightEnvironment");
+                const auto yawName = std::string("Yaw##LightEnvironment");
+
+                ImGui::ColorEdit3(ambientColor.c_str(), reinterpret_cast<float *>(&m_LightEnvironment->m_AmbientColor));
+                ImGui::ColorEdit3(baseColorName.c_str(), reinterpret_cast<float *>(&m_LightEnvironment->m_BaseColor));
+                ImGui::SliderFloat(pitchName.c_str(), &m_LightEnvironment->m_Pitch, 0.f, 360.f);
+                ImGui::SliderFloat(yawName.c_str(), &m_LightEnvironment->m_Yaw, 0.f, 360.f);
+            }
+
             auto i = 0u;
 
-            for (; i < g_LightPoints.size(); i++) {
+            for (; i < m_LightPoints.size(); i++) {
+                const auto lightPoint = m_LightPoints[i];
+
                 const auto lightPointName = std::string("LightPoint ") + std::to_string(i);
 
                 ImGui::SeparatorText(lightPointName.c_str());
-
-                auto &lightPoint = g_LightPoints[i];
 
                 const auto positonName = std::string("Position##LightPoint") + std::to_string(i);
                 const auto baseColorName = std::string("Base color##LightPoint") + std::to_string(i);
@@ -114,10 +126,13 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
             ImGui::SeparatorText(lastLightPointName.c_str());
             
             if (ImGui::Button("Add source")) {
-                const auto lightPoint = std::make_shared<LightPoint>(g_Camera->m_Position, glm::vec3(1.f), 800.f);
+                auto lightPoint = std::make_unique<LightPoint>();
+                lightPoint->m_BaseColor = glm::vec3(1.f);
+                lightPoint->m_Position = m_ActiveCamera->m_Position;
+                lightPoint->m_Radius = 800.f;
 
-                g_LightPoints.push_back(lightPoint);
-            };
+                g_Scene->Insert(std::move(lightPoint));
+            }
 
             // Shadows
             ImGui::SeparatorText("Shadows");
@@ -134,4 +149,8 @@ void Ui::Update(const std::vector<SDL_Event> &events) {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     }
+
+    m_ActiveCamera = nullptr;
+    m_LightEnvironment = nullptr;
+    m_LightPoints = {};
 }

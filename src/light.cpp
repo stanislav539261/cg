@@ -3,34 +3,33 @@
 #include <vector>
 
 #include "light.hpp"
+#include "render.hpp"
+#include "ui.hpp"
 
-std::shared_ptr<LightEnvironment> g_LightEnvironment = nullptr;
-std::vector<std::shared_ptr<LightPoint>> g_LightPoints = {};
-
-LightEnvironment::LightEnvironment(const glm::vec3 &ambientColor, const glm::vec3 &baseColor, float pitch, float yaw) : Object() {
-    m_AmbientColor = ambientColor;
-    m_BaseColor = baseColor;
-    m_Pitch = pitch;
-    m_Yaw = yaw;
+LightEnvironment::LightEnvironment() : Object() {
+    m_AmbientColor = {};
+    m_BaseColor = {};
+    m_Pitch = 0.f;
+    m_Yaw = 0.f;
 }
 
 LightEnvironment::~LightEnvironment() {
     
 }
 
-std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera &camera, const std::array<float, 4> &levels, bool reversedZ) const {
+std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera *camera, const std::array<float, 4> &levels, bool reversedZ) const {
     auto cascades = std::array<glm::mat4, 5>();
 
     const auto computeLightSpaceMatrix = [this, camera, reversedZ](auto near, auto far) {
-        auto fovY = glm::radians(camera.m_FovY);
+        auto fovY = glm::radians(camera->m_FovY);
         auto halfFovY = fovY * 0.5f;
         auto v = glm::tan(halfFovY);
-        auto h = camera.m_AspectRatio * v;
+        auto h = camera->AspectRatio() * v;
         auto halfFovX = glm::atan(h);
         auto fovX = halfFovX * 2.f;
 
         auto projection = glm::perspectiveZO(fovY, fovX, near, far);
-        auto inversedViewProjection = glm::inverse(projection * camera.View());
+        auto inversedViewProjection = glm::inverse(projection * camera->View());
         auto corners = std::vector<glm::vec4>();
         
         for (auto x = 0u; x < 2; x++) {
@@ -88,11 +87,11 @@ std::array<glm::mat4, 5> LightEnvironment::CascadeViewProjections(const Camera &
 
     for (auto i = 0u; i < levels.size() + 1; ++i){
         if (i == 0){
-            cascades[i] = computeLightSpaceMatrix(camera.m_NearZ, levels[i]);
+            cascades[i] = computeLightSpaceMatrix(camera->m_NearZ, levels[i]);
         } else if (i < levels.size()){
             cascades[i] = computeLightSpaceMatrix(levels[i - 1], levels[i]);
         } else {
-            cascades[i] = computeLightSpaceMatrix(levels[i - 1], camera.m_FarZ);
+            cascades[i] = computeLightSpaceMatrix(levels[i - 1], camera->m_FarZ);
         }
     }
 
@@ -107,15 +106,25 @@ glm::vec3 LightEnvironment::Forward() const {
     ));
 }
 
-LightPoint::LightPoint(const glm::vec3 &position, const glm::vec3 &baseColor, float radius, bool castShadows) : Object() {
-    m_BaseColor = baseColor;
-    m_Position = position;
-    m_Radius = radius;
-    m_CastShadows = castShadows;
+void LightEnvironment::Update() {
+    g_Render->m_DrawableLightEnvironment = this;
+    g_Ui->m_LightEnvironment = this;
+}
+
+LightPoint::LightPoint() : Object() {
+    m_BaseColor = {};
+    m_Position = {};
+    m_Radius = 0.f;
+    m_CastShadows = false;
 }
 
 LightPoint::~LightPoint() {
     
+}
+
+void LightPoint::Update() {
+    g_Render->m_DrawableLightPoints.push_back(this);
+    g_Ui->m_LightPoints.push_back(this);
 }
 
 std::array<glm::mat4, 6> LightPoint::ViewProjections(bool reversedZ) const {

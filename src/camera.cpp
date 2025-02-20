@@ -2,31 +2,28 @@
 #include <glm/ext/matrix_transform.hpp>
 
 #include "camera.hpp"
+#include "control.hpp"
+#include "render.hpp"
 #include "state.hpp"
+#include "ui.hpp"
+#include "window.hpp"
 
-std::shared_ptr<Camera> g_Camera = nullptr;
-
-Camera::Camera(
-    float aspectRatio, 
-    float fovY,
-    float nearZ,
-    float farZ, 
-    const glm::vec3 &position,
-    float pitch, 
-    float yaw
-) : Object() {
-    m_Position = position;
+Camera::Camera() : Object() {
+    m_Position = {};
     m_Up = glm::vec3(0.f, 1.f, 0.f);
-    m_NearZ = nearZ;
-    m_FarZ = farZ;
-    m_AspectRatio = aspectRatio;
+    m_NearZ = 1.f;
+    m_FarZ = 100000.f;
     m_Pitch = 0.f;
     m_Yaw = 0.f;
-    m_FovY = fovY;
+    m_FovY = 78.f;
 }
 
 Camera::~Camera() {
 
+}
+
+float Camera::AspectRatio() const {
+    return g_Window->m_ScreenWidth / static_cast<float>(g_Window->m_ScreenHeight);
 }
 
 glm::vec3 Camera::Forward() const {
@@ -41,7 +38,7 @@ glm::mat4 Camera::Projection(bool reversedZ) const {
     auto fovY = glm::radians(m_FovY);
     auto halfFovY = fovY * 0.5f;
     auto v = glm::tan(halfFovY);
-    auto h = m_AspectRatio * v;
+    auto h = AspectRatio() * v;
     auto halfFovX = glm::atan(h);
     auto fovX = halfFovX * 2.f;
 
@@ -59,6 +56,16 @@ void Camera::Translate(const glm::vec3 &direction) {
 
     m_Position += speed * forward * direction.z;
     m_Position += speed * glm::normalize(glm::cross(forward, m_Up)) * direction.x;
+}
+
+void Camera::Update() {
+    m_Pitch = glm::clamp(m_Pitch + g_Control->m_PitchOffset, -89.f, 89.f);
+    m_Yaw += g_Control->m_YawOffset;
+
+    Translate(g_Control->m_Direction);
+
+    g_Render->m_DrawableActiveCamera = this;
+    g_Ui->m_ActiveCamera = this;
 }
 
 glm::mat4 Camera::View() const {

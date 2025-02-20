@@ -6,6 +6,7 @@
 #include "camera.hpp"
 #include "light.hpp"
 #include "render.hpp"
+#include "scene.hpp"
 #include "state.hpp"
 #include "window.hpp"
 
@@ -16,6 +17,7 @@ constexpr GLfloat DEPTH_ZERO[] = { 0.f };
 constexpr GLuint  GRID_SIZE_X = 16;
 constexpr GLuint  GRID_SIZE_Y = 8;
 constexpr GLuint  GRID_SIZE_Z = 24;
+constexpr size_t  MAX_LIGHT_ENVIRONMENTS = 1;
 constexpr size_t  MAX_LIGHT_POINTS = 1024;
 constexpr GLuint  SHADOW_CSM_SIZE = 2048;
 constexpr GLuint  SHADOW_CUBE_SIZE = 1024;
@@ -154,6 +156,9 @@ Render::Render() {
             m_AmbientOcclusionNumSlices = 4;
             m_AmbientOcclusionRadius = 4.f;
             m_DrawFlags = DrawFlags::Lighting;
+            m_DrawableActiveCamera = nullptr;
+            m_DrawableLightEnvironment = nullptr;
+            m_DrawableLightPoints = {};
             m_EnableAmbientOcclusion = true;
             m_EnableReverseZ = true;
             m_EnableVSync = false;
@@ -461,22 +466,24 @@ void Render::Update() {
     auto lightPointUploadData = std::vector<GpuLightPoint>();
     auto numLightPointShadows = 0u;
 
-    if (g_Camera) {
+    if (m_DrawableActiveCamera) {
         static glm::mat4 lastView = glm::identity<glm::mat4>();
 
-        const auto projection = g_Camera->Projection(m_EnableReverseZ);
-        const auto projectionNonReversed = m_EnableReverseZ ? g_Camera->Projection(false) : projection;
-        const auto fovY = glm::radians(g_Camera->m_FovY);
+        const auto projection = m_DrawableActiveCamera->Projection(m_EnableReverseZ);
+        const auto projectionNonReversed = m_EnableReverseZ ? m_DrawableActiveCamera->Projection(false) : projection;
+        const auto fovY = glm::radians(m_DrawableActiveCamera->m_FovY);
         const auto halfFovY = fovY * 0.5f;
         const auto v = glm::tan(halfFovY);
-        const auto h = g_Camera->m_AspectRatio * v;
+        const auto h = m_DrawableActiveCamera->AspectRatio() * v;
         const auto halfFovX = glm::atan(h);
         const auto fovX = halfFovX * 2.f;
-        const auto view = g_Camera->View();
+        const auto view = m_DrawableActiveCamera->View();
         const auto normTileDim = glm::vec2(1.f / static_cast<float>(GRID_SIZE_X), 1.f / static_cast<float>(GRID_SIZE_Y));
         const auto tileSizeInv = glm::vec2(1.f / (g_Window->m_ScreenWidth * normTileDim.x), 1.f / (g_Window->m_ScreenHeight * normTileDim.y));
-        const auto sliceBiasFactor = -((static_cast<float>(GRID_SIZE_Z) * std::log2(g_Camera->m_NearZ)) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ));
-        const auto sliceScalingFactor = static_cast<float>(GRID_SIZE_Z) / std::log2(g_Camera->m_FarZ / g_Camera->m_NearZ);
+        const auto farZ = m_DrawableActiveCamera->m_FarZ;
+        const auto nearZ = m_DrawableActiveCamera->m_NearZ;
+        const auto sliceBiasFactor = -((static_cast<float>(GRID_SIZE_Z) * std::log2(nearZ)) / std::log2(farZ / nearZ));
+        const auto sliceScalingFactor = static_cast<float>(GRID_SIZE_Z) / std::log2(farZ / nearZ);
 
         cameraUploadData.push_back(GpuCamera {
             .m_LastView = lastView,
@@ -485,11 +492,11 @@ void Render::Update() {
             .m_ProjectionNonReversed = projectionNonReversed,
             .m_ProjectionNonReversedInversed = glm::inverse(projectionNonReversed),
             .m_View = view,
-            .m_Position = g_Camera->m_Position,
+            .m_Position = m_DrawableActiveCamera->m_Position,
             .m_NormTileDim = normTileDim,
             .m_TileSizeInv = tileSizeInv,
-            .m_FarZ = g_Camera->m_FarZ,
-            .m_NearZ = g_Camera->m_NearZ,
+            .m_FarZ = farZ,
+            .m_NearZ = nearZ,
             .m_FovX = fovX,
             .m_FovY = fovY,
             .m_SliceBiasFactor = sliceBiasFactor,
@@ -499,26 +506,24 @@ void Render::Update() {
         lastView = std::move(view);
     }
 
-    if (g_LightEnvironment) {
-        auto cascadeLevels = std::array<float, 4> {
-            g_Camera->m_FarZ * 1.f / 80.f,
-            g_Camera->m_FarZ * 1.f / 40.f,
-            g_Camera->m_FarZ * 1.f / 20.f,
-            g_Camera->m_FarZ * 1.f / 10.f,
+    if (m_DrawableActiveCamera && m_DrawableLightEnvironment) {
+        const auto cascadeLevels = std::array<float, 4> {
+            m_DrawableActiveCamera->m_FarZ * 1.f / 80.f,
+            m_DrawableActiveCamera->m_FarZ * 1.f / 40.f,
+            m_DrawableActiveCamera->m_FarZ * 1.f / 20.f,
+            m_DrawableActiveCamera->m_FarZ * 1.f / 10.f,
         };
 
         lightEnvironmentUploadData.push_back(GpuLightEnvironment {
-            .m_CascadeViewProjections = g_LightEnvironment->CascadeViewProjections(*g_Camera, cascadeLevels, m_EnableReverseZ),
+            .m_CascadeViewProjections = m_DrawableLightEnvironment->CascadeViewProjections(m_DrawableActiveCamera, cascadeLevels, m_EnableReverseZ),
             .m_CascadePlaneDistances = cascadeLevels,
-            .m_AmbientColor = g_LightEnvironment->m_AmbientColor,
-            .m_BaseColor = g_LightEnvironment->m_BaseColor,
-            .m_Direction = g_LightEnvironment->Forward(),
+            .m_AmbientColor = m_DrawableLightEnvironment->m_AmbientColor,
+            .m_BaseColor = m_DrawableLightEnvironment->m_BaseColor,
+            .m_Direction = m_DrawableLightEnvironment->Forward(),
         });
     }
 
-    for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHT_POINTS); i++) {
-        const auto &lightPoint = g_LightPoints[i];
-
+    for (const auto &lightPoint : m_DrawableLightPoints) {
         lightPointUploadData.push_back(GpuLightPoint {
             .m_ViewProjections = lightPoint->ViewProjections(m_EnableReverseZ),
             .m_Position = lightPoint->m_Position,
@@ -603,6 +608,10 @@ void Render::Update() {
     ScreenPass();
 
     m_NumFrames++;
+    
+    m_DrawableActiveCamera = nullptr;
+    m_DrawableLightEnvironment = nullptr;
+    m_DrawableLightPoints.clear();
 }
 
 void Render::ShadowCsmPass() {;
@@ -673,8 +682,8 @@ void Render::ShadowCubePass() {
 
     auto numLightPointShadows = 0u;
 
-    for (auto i = 0u; i < std::min(g_LightPoints.size(), MAX_LIGHT_POINTS); i++) {
-        const auto &lightPoint = g_LightPoints[i];
+    for (auto i = 0u; i < std::min(m_DrawableLightPoints.size(), MAX_LIGHT_POINTS); i++) {
+        const auto &lightPoint = m_DrawableLightPoints[i];
 
         if (!lightPoint->m_CastShadows) {
             continue;
@@ -896,7 +905,7 @@ void Render::LightCullingPass() {
     m_LightIndexBuffer->BindStorage(4);
     m_LightPointBuffer->BindStorage(5);
 
-    m_LightCullingShaderProgram->SetUniform(0, static_cast<std::uint32_t>(g_LightPoints.size()));
+    m_LightCullingShaderProgram->SetUniform(0, static_cast<std::uint32_t>(m_DrawableLightPoints.size()));
 
     glDispatchCompute(GRID_SIZE_X, GRID_SIZE_Y, GRID_SIZE_Z);
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -968,7 +977,7 @@ void Render::LightingPass() {
 
     m_LightingShaderProgram->SetUniform(0, m_EnableAmbientOcclusion);
     m_LightingShaderProgram->SetUniform(1, m_EnableReverseZ);
-    m_LightingShaderProgram->SetUniform(2, static_cast<std::uint32_t>(g_LightPoints.size()));
+    m_LightingShaderProgram->SetUniform(2, static_cast<std::uint32_t>(m_DrawableLightPoints.size()));
     m_LightingShaderProgram->SetUniform(3, 1.f / SHADOW_CSM_SIZE * m_ShadowCsmFilterRadius);
     m_LightingShaderProgram->SetUniform(4, m_ShadowCsmVarianceMax);
     m_LightingShaderProgram->SetUniform(5, 1.f / SHADOW_CUBE_SIZE * m_ShadowCubeFilterRadius);
